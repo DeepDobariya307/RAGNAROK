@@ -35,7 +35,7 @@ def init_session():
         "session_id": str(uuid.uuid4())[:8],
         "messages": [],
         "rag_chain": None,
-        "processed_files": [],    # list of filenames already indexed
+        "processed_files": [],
         "vs_manager": None,
         "api_keys_ok": False,
     }
@@ -114,7 +114,6 @@ with st.sidebar:
                         namespace=st.session_state.session_id
                     )
 
-                    # Build or rebuild the RAG chain with updated vectorstore
                     st.session_state.rag_chain = RAGChain(vectorstore)
                     st.session_state.processed_files.extend(
                         [f.name for f in new_files]
@@ -145,7 +144,6 @@ with st.sidebar:
 
     with col_a:
         if st.button("💬 New Chat", use_container_width=True):
-            # Reset chat but keep documents indexed
             st.session_state.messages = []
             if st.session_state.rag_chain:
                 st.session_state.rag_chain.reset()
@@ -153,19 +151,17 @@ with st.sidebar:
 
     with col_b:
         if st.button("🗑️ Clear All", use_container_width=True):
-            # Wipe everything — documents, chat, Pinecone namespace
             with st.spinner("Clearing session…"):
                 if st.session_state.vs_manager:
                     st.session_state.vs_manager.delete_namespace(
                         st.session_state.session_id
                     )
-                # Reset all session state
                 for key in ["messages", "rag_chain", "processed_files", "vs_manager"]:
                     st.session_state[key] = [] if key in ["messages", "processed_files"] else None
                 st.session_state.session_id = str(uuid.uuid4())[:8]
                 st.rerun()
 
-    # ── Export button (only if there are messages)
+    # ── Export button
     if st.session_state.messages:
         st.divider()
         export_md = export_conversation(st.session_state.messages)
@@ -177,7 +173,7 @@ with st.sidebar:
             use_container_width=True,
         )
 
-    # ── Session ID (footer)
+    # ── Session ID footer
     st.markdown(
         f"<div style='position:fixed; bottom:1rem; font-size:0.7rem; color:#374151;'>"
         f"Session: {st.session_state.session_id}</div>",
@@ -197,40 +193,56 @@ st.markdown(
 # ── Empty State ───────────────────────────────────────────────────────────────
 if not st.session_state.processed_files:
     st.markdown("<br>", unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns(3)
+
+    card_style = """
+        background:#1a1a2e;
+        border:1px solid rgba(124,58,237,0.25);
+        border-radius:14px;
+        padding:2rem 1.2rem;
+        text-align:center;
+        height:190px;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
+        gap:0.6rem;
+    """
 
     with col1:
         st.markdown(
-            "<div class='step-card'>"
+            f"<div style='{card_style}'>"
             "<div style='font-size:2rem;'>📤</div>"
-            "<h4 style='color:#a78bfa; margin:0.5rem 0;'>Step 1</h4>"
-            "<p style='color:#6b7280; font-size:0.85rem;'>Upload your PDFs from the sidebar. Multiple files supported.</p>"
+            "<div style='color:#a78bfa; font-weight:600; font-size:1rem;'>Step 1</div>"
+            "<div style='color:#6b7280; font-size:0.82rem; line-height:1.5;'>Upload your PDFs from the sidebar. Multiple files supported.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
 
     with col2:
         st.markdown(
-            "<div class='step-card'>"
+            f"<div style='{card_style}'>"
             "<div style='font-size:2rem;'>⚡</div>"
-            "<h4 style='color:#a78bfa; margin:0.5rem 0;'>Step 2</h4>"
-            "<p style='color:#6b7280; font-size:0.85rem;'>Click 'Index Documents' to embed and store in Pinecone.</p>"
+            "<div style='color:#a78bfa; font-weight:600; font-size:1rem;'>Step 2</div>"
+            "<div style='color:#6b7280; font-size:0.82rem; line-height:1.5;'>Click Index Documents to embed and store in Pinecone.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
 
     with col3:
         st.markdown(
-            "<div class='step-card'>"
+            f"<div style='{card_style}'>"
             "<div style='font-size:2rem;'>💬</div>"
-            "<h4 style='color:#a78bfa; margin:0.5rem 0;'>Step 3</h4>"
-            "<p style='color:#6b7280; font-size:0.85rem;'>Ask anything. Every answer cites the exact document and page.</p>"
+            "<div style='color:#a78bfa; font-weight:600; font-size:1rem;'>Step 3</div>"
+            "<div style='color:#6b7280; font-size:0.82rem; line-height:1.5;'>Ask anything. Every answer cites the exact document and page.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
 
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
-        "<br><p style='text-align:center; color:#374151; font-size:0.8rem;'>"
+        "<p style='text-align:center; color:#374151; font-size:0.78rem;'>"
         "Powered by GPT-4o · text-embedding-3-large · Pinecone Serverless · LangChain LCEL</p>",
         unsafe_allow_html=True,
     )
@@ -238,13 +250,10 @@ if not st.session_state.processed_files:
 
 
 # ── Chat Interface ────────────────────────────────────────────────────────────
-
-# Render message history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-        # Show sources expander for assistant messages that have them
         if msg["role"] == "assistant" and msg.get("sources"):
             with st.expander("📖 View Sources", expanded=False):
                 st.markdown(
@@ -259,14 +268,11 @@ if prompt := st.chat_input("Ask anything about your documents…"):
         st.warning("Documents are still being indexed. Please wait a moment.")
         st.stop()
 
-    # Show user message immediately
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Retrieve sources + stream answer
     with st.chat_message("assistant"):
-        # Step 1: Retrieve (shows a subtle spinner while fetching)
         with st.spinner("🔍 Searching documents…"):
             try:
                 source_docs, standalone_q = st.session_state.rag_chain.retrieve(prompt)
@@ -274,24 +280,20 @@ if prompt := st.chat_input("Ask anything about your documents…"):
                 st.error(f"Retrieval error: {e}")
                 st.stop()
 
-        # Step 2: Stream GPT-4o answer token by token
         response_placeholder = st.empty()
         full_response = ""
 
         try:
             for token in st.session_state.rag_chain.stream(standalone_q, source_docs):
                 full_response += token
-                # Trailing cursor while streaming
                 response_placeholder.markdown(full_response + "▌")
 
-            # Final render without cursor
             response_placeholder.markdown(full_response)
 
         except Exception as e:
             st.error(f"Generation error: {e}")
             st.stop()
 
-        # Step 3: Show sources
         if source_docs:
             with st.expander("📖 View Sources", expanded=False):
                 st.markdown(
@@ -299,12 +301,10 @@ if prompt := st.chat_input("Ask anything about your documents…"):
                     unsafe_allow_html=False,
                 )
 
-    # Persist to session state
     st.session_state.messages.append({
         "role": "assistant",
         "content": full_response,
         "sources": source_docs,
     })
 
-    # Update RAG chain memory
     st.session_state.rag_chain.update_history(prompt, full_response)
