@@ -19,7 +19,7 @@ pinned: false
 [![Pinecone](https://img.shields.io/badge/Pinecone-Serverless-13AEA7?style=flat-square)](https://pinecone.io)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
 [![RAGAS](https://img.shields.io/badge/RAGAS-Evaluation-F97316?style=flat-square)](https://docs.ragas.io)
-[![Deploy](https://img.shields.io/badge/Railway-Deploy-0B0D0E?style=flat-square&logo=railway)](https://railway.app)
+[![Deploy](https://img.shields.io/badge/HuggingFace-Spaces-FFD21E?style=flat-square&logo=huggingface)](https://huggingface.co/spaces/DeepDobariya307/RAGNAROK)
 
 ---
 
@@ -176,16 +176,17 @@ RAGNAROK/
 
 ---
 
-## ☁️ Deploy to Railway
+## ☁️ Live Demo
 
-1. Push this repo to GitHub (public or private)
-2. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub**
-3. Select your `RAGNAROK` repo
-4. Add environment variables in Railway dashboard:
-   - `OPENAI_API_KEY`
-   - `PINECONE_API_KEY`
-5. Deploy → Railway builds the Docker image and gives you a live URL
+👉 **[Try RAGNAROK live on HuggingFace Spaces](https://huggingface.co/spaces/DeepDobariya307/RAGNAROK)**
 
+## ☁️ Deploy Your Own
+
+1. Fork this repo
+2. Go to [huggingface.co/spaces](https://huggingface.co/spaces) → New Space → Docker
+3. Push your code
+4. Add `OPENAI_API_KEY` and `PINECONE_API_KEY` as Secrets in Space Settings
+5. Done — your own instance is live!
 ---
 
 ## 🛠️ Tech Stack
@@ -198,7 +199,7 @@ RAGNAROK/
 | RAG Framework | LangChain LCEL |
 | Frontend | Streamlit |
 | Evaluation | RAGAS |
-| Deployment | Railway (Docker) |
+| Deployment | HuggingFace Spaces (Docker) |
 
 ---
 
