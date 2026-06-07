@@ -1,136 +1,89 @@
 """
-RAGNAROK — UI Styles
-Clean, consistent dark theme built on top of Streamlit's dark base.
+RAGNAROK — UI Styles (Clean Minimal Version)
+Let Streamlit's dark theme do the heavy lifting.
+We only add accents and typography on top.
 """
 
 RAGNAROK_CSS = """
 <style>
-/* ── Import Font ─────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-* {
+/* ── Base ────────────────────────────────────────────────────────────────── */
+html, body, .stApp {
     font-family: 'Inter', sans-serif !important;
-}
-
-/* ── Force consistent dark background everywhere ─────────────────────────── */
-.stApp {
     background-color: #0d0d1a !important;
 }
 
 .block-container {
     padding-top: 2rem !important;
-    padding-bottom: 2rem !important;
     max-width: 860px !important;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background-color: #1a1a2e !important;
-    border-right: 1px solid rgba(124, 58, 237, 0.3) !important;
+    background-color: #13131f !important;
+    border-right: 1px solid rgba(124, 58, 237, 0.25) !important;
 }
 
-[data-testid="stSidebar"] * {
-    color: #e2e0f0 !important;
-}
-
-/* ── All text ────────────────────────────────────────────────────────────── */
-p, span, label, div, h1, h2, h3, h4, h5, h6, li, a {
-    color: #e2e0f0 !important;
-}
-
-/* ── Title styling ───────────────────────────────────────────────────────── */
+/* ── Title ───────────────────────────────────────────────────────────────── */
 .ragnarok-title {
-    font-size: 2.8rem !important;
-    font-weight: 700 !important;
-    background: linear-gradient(135deg, #a78bfa, #7c3aed, #4f46e5) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
-    line-height: 1.2 !important;
-    margin-bottom: 0 !important;
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
 }
 
 .ragnarok-subtitle {
-    font-size: 0.8rem !important;
-    color: #6b7280 !important;
-    letter-spacing: 0.15em !important;
-    text-transform: uppercase !important;
-    margin-bottom: 1.5rem !important;
-    -webkit-text-fill-color: #6b7280 !important;
+    font-size: 0.78rem;
+    color: #6b7280;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
 }
 
-/* ── Buttons ─────────────────────────────────────────────────────────────── */
-.stButton > button {
+/* ── Primary button ──────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
-    color: #ffffff !important;
+    color: white !important;
     border: none !important;
     border-radius: 8px !important;
     font-weight: 500 !important;
-    transition: all 0.2s ease !important;
+    padding: 0.5rem 1rem !important;
     width: 100% !important;
+    transition: all 0.2s ease !important;
 }
 
-.stButton > button:hover {
+[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4) !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4) !important;
-    color: #ffffff !important;
+}
+
+/* ── Secondary buttons ───────────────────────────────────────────────────── */
+[data-testid="stSidebar"] .stButton > button[kind="secondary"] {
+    background: rgba(124, 58, 237, 0.1) !important;
+    border: 1px solid rgba(124, 58, 237, 0.3) !important;
+    color: #a78bfa !important;
+    border-radius: 8px !important;
 }
 
 /* ── Chat messages ───────────────────────────────────────────────────────── */
 [data-testid="stChatMessage"] {
     background-color: #1a1a2e !important;
-    border: 1px solid rgba(124, 58, 237, 0.2) !important;
+    border: 1px solid rgba(124, 58, 237, 0.15) !important;
     border-radius: 12px !important;
-    padding: 1rem !important;
-    margin-bottom: 0.75rem !important;
-}
-
-[data-testid="stChatMessage"] p {
-    color: #e2e0f0 !important;
-}
-
-/* ── Chat input ──────────────────────────────────────────────────────────── */
-[data-testid="stChatInput"] textarea {
-    background-color: #1a1a2e !important;
-    color: #e2e0f0 !important;
-    border: 1px solid rgba(124, 58, 237, 0.4) !important;
-    border-radius: 10px !important;
-}
-
-[data-testid="stChatInput"] textarea:focus {
-    border-color: #7c3aed !important;
-    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2) !important;
-}
-
-/* ── File uploader ───────────────────────────────────────────────────────── */
-[data-testid="stFileUploader"] {
-    background-color: rgba(124, 58, 237, 0.05) !important;
-    border: 1px dashed rgba(124, 58, 237, 0.4) !important;
-    border-radius: 10px !important;
-    padding: 0.5rem !important;
+    padding: 1rem 1.2rem !important;
+    margin-bottom: 0.5rem !important;
 }
 
 /* ── Expander ────────────────────────────────────────────────────────────── */
 [data-testid="stExpander"] {
     background-color: #1a1a2e !important;
-    border: 1px solid rgba(124, 58, 237, 0.15) !important;
+    border: 1px solid rgba(124, 58, 237, 0.12) !important;
     border-radius: 8px !important;
-}
-
-[data-testid="stExpander"] summary {
-    color: #a78bfa !important;
-    font-size: 0.85rem !important;
-}
-
-[data-testid="stExpander"] p {
-    color: #9ca3af !important;
-    font-size: 0.85rem !important;
-}
-
-/* ── Success / Error / Warning / Info ────────────────────────────────────── */
-[data-testid="stAlert"] {
-    border-radius: 8px !important;
-    background-color: #1a1a2e !important;
+    margin-top: 0.5rem !important;
 }
 
 /* ── Metrics ─────────────────────────────────────────────────────────────── */
@@ -141,40 +94,26 @@ p, span, label, div, h1, h2, h3, h4, h5, h6, li, a {
     padding: 1rem !important;
 }
 
-[data-testid="stMetricValue"] {
-    color: #a78bfa !important;
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #0d0d1a; }
+::-webkit-scrollbar-thumb {
+    background: rgba(124, 58, 237, 0.4);
+    border-radius: 2px;
+}
+
+/* ── Step cards ──────────────────────────────────────────────────────────── */
+.step-card {
+    background-color: #1a1a2e;
+    border: 1px solid rgba(124, 58, 237, 0.2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
 }
 
 /* ── Divider ─────────────────────────────────────────────────────────────── */
 hr {
-    border-color: rgba(124, 58, 237, 0.2) !important;
-}
-
-/* ── Scrollbar ───────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: #0d0d1a; }
-::-webkit-scrollbar-thumb {
-    background: rgba(124, 58, 237, 0.5);
-    border-radius: 3px;
-}
-
-/* ── Step cards on empty state ───────────────────────────────────────────── */
-.step-card {
-    background-color: #1a1a2e !important;
-    border: 1px solid rgba(124, 58, 237, 0.25) !important;
-    border-radius: 12px !important;
-    padding: 1.5rem !important;
-    text-align: center !important;
-}
-
-.step-card h4 {
-    color: #a78bfa !important;
-    -webkit-text-fill-color: #a78bfa !important;
-}
-
-.step-card p {
-    color: #6b7280 !important;
-    -webkit-text-fill-color: #6b7280 !important;
+    border-color: rgba(124, 58, 237, 0.15) !important;
 }
 </style>
 """
