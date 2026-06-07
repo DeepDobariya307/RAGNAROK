@@ -12,14 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p ~/.streamlit && echo "\
-[server]\n\
-headless = true\n\
-enableCORS = false\n\
-enableXsrfProtection = false\n\
-port = 7860\n\
-" > ~/.streamlit/config.toml
-
 EXPOSE 7860
 
 CMD ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0"]

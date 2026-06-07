@@ -1,209 +1,185 @@
 """
 RAGNAROK — UI Styles
-Dark Norse-themed interface. Electric purple on near-black.
-Applied once at app startup via st.markdown().
+Clean, consistent dark theme built on top of Streamlit's dark base.
 """
 
 RAGNAROK_CSS = """
 <style>
-/* ── Fonts ──────────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/* ── Import Font ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ── Root & Background ──────────────────────────────────────────────────── */
-.stApp {
-    background: linear-gradient(135deg, #08080f 0%, #0f0820 50%, #080d1a 100%);
-    color: #e2e0f0;
-    font-family: 'Inter', sans-serif;
+* {
+    font-family: 'Inter', sans-serif !important;
 }
 
-/* Remove default Streamlit top padding */
+/* ── Force consistent dark background everywhere ─────────────────────────── */
+.stApp {
+    background-color: #0d0d1a !important;
+}
+
 .block-container {
     padding-top: 2rem !important;
-    max-width: 900px;
+    padding-bottom: 2rem !important;
+    max-width: 860px !important;
 }
 
-/* ── Sidebar ────────────────────────────────────────────────────────────── */
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background: rgba(8, 8, 20, 0.97) !important;
-    border-right: 1px solid rgba(139, 92, 246, 0.25) !important;
+    background-color: #1a1a2e !important;
+    border-right: 1px solid rgba(124, 58, 237, 0.3) !important;
 }
 
-[data-testid="stSidebar"] .block-container {
-    padding-top: 1.5rem !important;
-}
-
-/* ── Header ─────────────────────────────────────────────────────────────── */
-.ragnarok-title {
-    font-size: 2.8rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 50%, #4f46e5 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: -0.02em;
-    line-height: 1.1;
-    margin-bottom: 0.2rem;
-}
-
-.ragnarok-subtitle {
-    color: #6b7280;
-    font-size: 0.9rem;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    font-weight: 400;
-    margin-bottom: 2rem;
-}
-
-/* ── Chat Messages ──────────────────────────────────────────────────────── */
-[data-testid="stChatMessage"] {
-    background: rgba(15, 10, 30, 0.6) !important;
-    border: 1px solid rgba(139, 92, 246, 0.15) !important;
-    border-radius: 12px !important;
-    padding: 1rem 1.2rem !important;
-    margin-bottom: 0.75rem !important;
-    backdrop-filter: blur(12px);
-}
-
-/* User message — slightly different shade */
-[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
-    background: rgba(79, 70, 229, 0.08) !important;
-    border-color: rgba(79, 70, 229, 0.2) !important;
-}
-
-/* ── Chat Input ─────────────────────────────────────────────────────────── */
-[data-testid="stChatInput"] {
-    background: rgba(15, 10, 30, 0.8) !important;
-    border: 1px solid rgba(139, 92, 246, 0.35) !important;
-    border-radius: 12px !important;
+[data-testid="stSidebar"] * {
     color: #e2e0f0 !important;
 }
 
-[data-testid="stChatInput"]:focus-within {
-    border-color: rgba(139, 92, 246, 0.7) !important;
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15) !important;
+/* ── All text ────────────────────────────────────────────────────────────── */
+p, span, label, div, h1, h2, h3, h4, h5, h6, li, a {
+    color: #e2e0f0 !important;
 }
 
-/* ── Buttons ────────────────────────────────────────────────────────────── */
+/* ── Title styling ───────────────────────────────────────────────────────── */
+.ragnarok-title {
+    font-size: 2.8rem !important;
+    font-weight: 700 !important;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed, #4f46e5) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    line-height: 1.2 !important;
+    margin-bottom: 0 !important;
+}
+
+.ragnarok-subtitle {
+    font-size: 0.8rem !important;
+    color: #6b7280 !important;
+    letter-spacing: 0.15em !important;
+    text-transform: uppercase !important;
+    margin-bottom: 1.5rem !important;
+    -webkit-text-fill-color: #6b7280 !important;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
 .stButton > button {
-    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%) !important;
-    color: white !important;
+    background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
+    color: #ffffff !important;
     border: none !important;
     border-radius: 8px !important;
     font-weight: 500 !important;
-    font-family: 'Inter', sans-serif !important;
     transition: all 0.2s ease !important;
-    letter-spacing: 0.01em;
+    width: 100% !important;
 }
 
 .stButton > button:hover {
     transform: translateY(-1px) !important;
     box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4) !important;
+    color: #ffffff !important;
 }
 
-.stButton > button:active {
-    transform: translateY(0) !important;
+/* ── Chat messages ───────────────────────────────────────────────────────── */
+[data-testid="stChatMessage"] {
+    background-color: #1a1a2e !important;
+    border: 1px solid rgba(124, 58, 237, 0.2) !important;
+    border-radius: 12px !important;
+    padding: 1rem !important;
+    margin-bottom: 0.75rem !important;
 }
 
-/* Secondary button */
-.stButton > button[kind="secondary"] {
-    background: rgba(139, 92, 246, 0.1) !important;
-    border: 1px solid rgba(139, 92, 246, 0.3) !important;
+[data-testid="stChatMessage"] p {
+    color: #e2e0f0 !important;
 }
 
-/* ── File Uploader ──────────────────────────────────────────────────────── */
-[data-testid="stFileUploader"] {
-    background: rgba(139, 92, 246, 0.05) !important;
-    border: 1px dashed rgba(139, 92, 246, 0.3) !important;
+/* ── Chat input ──────────────────────────────────────────────────────────── */
+[data-testid="stChatInput"] textarea {
+    background-color: #1a1a2e !important;
+    color: #e2e0f0 !important;
+    border: 1px solid rgba(124, 58, 237, 0.4) !important;
     border-radius: 10px !important;
-    transition: border-color 0.2s ease;
 }
 
-[data-testid="stFileUploader"]:hover {
-    border-color: rgba(139, 92, 246, 0.6) !important;
+[data-testid="stChatInput"] textarea:focus {
+    border-color: #7c3aed !important;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2) !important;
 }
 
-/* ── Expander (Sources) ─────────────────────────────────────────────────── */
+/* ── File uploader ───────────────────────────────────────────────────────── */
+[data-testid="stFileUploader"] {
+    background-color: rgba(124, 58, 237, 0.05) !important;
+    border: 1px dashed rgba(124, 58, 237, 0.4) !important;
+    border-radius: 10px !important;
+    padding: 0.5rem !important;
+}
+
+/* ── Expander ────────────────────────────────────────────────────────────── */
 [data-testid="stExpander"] {
-    background: rgba(8, 8, 20, 0.6) !important;
-    border: 1px solid rgba(139, 92, 246, 0.12) !important;
+    background-color: #1a1a2e !important;
+    border: 1px solid rgba(124, 58, 237, 0.15) !important;
     border-radius: 8px !important;
 }
 
 [data-testid="stExpander"] summary {
-    color: #8b7cf6 !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
+    color: #a78bfa !important;
+    font-size: 0.85rem !important;
 }
 
-/* ── Metrics ────────────────────────────────────────────────────────────── */
+[data-testid="stExpander"] p {
+    color: #9ca3af !important;
+    font-size: 0.85rem !important;
+}
+
+/* ── Success / Error / Warning / Info ────────────────────────────────────── */
+[data-testid="stAlert"] {
+    border-radius: 8px !important;
+    background-color: #1a1a2e !important;
+}
+
+/* ── Metrics ─────────────────────────────────────────────────────────────── */
 [data-testid="stMetric"] {
-    background: rgba(139, 92, 246, 0.08) !important;
-    border: 1px solid rgba(139, 92, 246, 0.2) !important;
+    background-color: #1a1a2e !important;
+    border: 1px solid rgba(124, 58, 237, 0.2) !important;
     border-radius: 10px !important;
     padding: 1rem !important;
 }
 
 [data-testid="stMetricValue"] {
     color: #a78bfa !important;
-    font-size: 2rem !important;
-    font-weight: 700 !important;
 }
 
-/* ── Info / Success / Warning boxes ─────────────────────────────────────── */
-[data-testid="stAlert"] {
-    border-radius: 8px !important;
-    border-left-width: 3px !important;
-}
-
-/* ── Divider ────────────────────────────────────────────────────────────── */
+/* ── Divider ─────────────────────────────────────────────────────────────── */
 hr {
-    border-color: rgba(139, 92, 246, 0.2) !important;
-    margin: 1rem 0 !important;
+    border-color: rgba(124, 58, 237, 0.2) !important;
 }
 
-/* ── Spinner ────────────────────────────────────────────────────────────── */
-.stSpinner > div {
-    border-top-color: #7c3aed !important;
-}
-
-/* ── Scrollbar ──────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: rgba(8, 8, 20, 0.5); }
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #0d0d1a; }
 ::-webkit-scrollbar-thumb {
-    background: rgba(124, 58, 237, 0.4);
+    background: rgba(124, 58, 237, 0.5);
     border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.7); }
 
-/* ── Source Citation Block ──────────────────────────────────────────────── */
-.source-block {
-    background: rgba(139, 92, 246, 0.06);
-    border-left: 3px solid #7c3aed;
-    border-radius: 0 6px 6px 0;
-    padding: 0.6rem 0.9rem;
-    margin: 0.4rem 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
-    color: #9ca3af;
-}
-
-/* ── Empty state cards ──────────────────────────────────────────────────── */
+/* ── Step cards on empty state ───────────────────────────────────────────── */
 .step-card {
-    background: rgba(139, 92, 246, 0.06);
-    border: 1px solid rgba(139, 92, 246, 0.2);
-    border-radius: 12px;
-    padding: 1.5rem;
-    text-align: center;
-    transition: border-color 0.2s ease;
+    background-color: #1a1a2e !important;
+    border: 1px solid rgba(124, 58, 237, 0.25) !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    text-align: center !important;
 }
-.step-card:hover {
-    border-color: rgba(139, 92, 246, 0.5);
+
+.step-card h4 {
+    color: #a78bfa !important;
+    -webkit-text-fill-color: #a78bfa !important;
+}
+
+.step-card p {
+    color: #6b7280 !important;
+    -webkit-text-fill-color: #6b7280 !important;
 }
 </style>
 """
 
 
 def apply_styles():
-    """Call this once at the top of app.py to inject all custom CSS."""
     import streamlit as st
     st.markdown(RAGNAROK_CSS, unsafe_allow_html=True)
