@@ -1,0 +1,9 @@
+# railway.toml — Railway deployment configuration
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

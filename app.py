@@ -1,0 +1,310 @@
+"""
+RAGNAROK — Main Application
+Multi-document RAG chat interface with streaming responses and source citations.
+Run with: streamlit run app.py
+"""
+
+import os
+import uuid
+
+import streamlit as st
+from dotenv import load_dotenv
+
+from core import DocumentProcessor, RAGChain, VectorStoreManager
+from ui.styles import apply_styles
+from utils.helpers import export_conversation, format_sources_markdown
+
+# ── Bootstrap ────────────────────────────────────────────────────────────────
+load_dotenv()
+
+st.set_page_config(
+    page_title="RAGNAROK",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        "About": "RAGNAROK — Multi-Document Intelligence Engine. Built with LangChain + GPT-4o + Pinecone."
+    },
+)
+apply_styles()
+
+
+# ── Session State Initialisation ─────────────────────────────────────────────
+def init_session():
+    defaults = {
+        "session_id": str(uuid.uuid4())[:8],
+        "messages": [],
+        "rag_chain": None,
+        "processed_files": [],    # list of filenames already indexed
+        "vs_manager": None,
+        "api_keys_ok": False,
+    }
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
+
+init_session()
+
+
+# ── API Key Validation ────────────────────────────────────────────────────────
+def check_api_keys() -> bool:
+    ok = bool(os.getenv("OPENAI_API_KEY")) and bool(os.getenv("PINECONE_API_KEY"))
+    st.session_state.api_keys_ok = ok
+    return ok
+
+
+# ── Vector Store (lazy init) ──────────────────────────────────────────────────
+def get_vs_manager() -> VectorStoreManager:
+    if st.session_state.vs_manager is None:
+        st.session_state.vs_manager = VectorStoreManager()
+    return st.session_state.vs_manager
+
+
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## ⚡ RAGNAROK")
+    st.markdown(
+        "<span style='color:#6b7280; font-size:0.75rem; letter-spacing:0.1em;'>"
+        "MULTI-DOCUMENT INTELLIGENCE</span>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    # ── API Key status
+    if not check_api_keys():
+        st.error("⚠️ API keys missing")
+        st.markdown(
+            "Create a `.env` file in the project root:\n\n"
+            "```\nOPENAI_API_KEY=sk-...\nPINECONE_API_KEY=pcsk_...\n```"
+        )
+        st.stop()
+    else:
+        st.success("✅ API keys loaded", icon="🔑")
+
+    st.divider()
+
+    # ── File Upload
+    st.markdown("**📂 Upload Documents**")
+    uploaded_files = st.file_uploader(
+        label="Upload PDFs",
+        type=["pdf"],
+        accept_multiple_files=True,
+        label_visibility="collapsed",
+        help="Upload one or more PDF files to query across",
+    )
+
+    # Detect genuinely new files (not yet indexed)
+    new_files = [
+        f for f in (uploaded_files or [])
+        if f.name not in st.session_state.processed_files
+    ]
+
+    if new_files:
+        if st.button("⚡ Index Documents", type="primary", use_container_width=True):
+            with st.spinner(f"Indexing {len(new_files)} file(s)…"):
+                try:
+                    processor = DocumentProcessor()
+                    chunks = processor.process(new_files)
+                    summary = DocumentProcessor.summarise(chunks)
+
+                    vs_manager = get_vs_manager()
+                    vs_manager.add_documents(chunks, namespace=st.session_state.session_id)
+                    vectorstore = vs_manager.get_vectorstore(
+                        namespace=st.session_state.session_id
+                    )
+
+                    # Build or rebuild the RAG chain with updated vectorstore
+                    st.session_state.rag_chain = RAGChain(vectorstore)
+                    st.session_state.processed_files.extend(
+                        [f.name for f in new_files]
+                    )
+
+                    st.success(
+                        f"✅ {summary['total_chunks']} chunks indexed across "
+                        f"{summary['file_count']} file(s)!"
+                    )
+                except Exception as e:
+                    st.error(f"Indexing failed: {e}")
+
+    # ── Indexed documents list
+    if st.session_state.processed_files:
+        st.divider()
+        st.markdown("**📚 Indexed Documents**")
+        for fname in st.session_state.processed_files:
+            st.markdown(
+                f"<div style='font-size:0.82rem; color:#9ca3af; padding:2px 0;'>"
+                f"📄 {fname}</div>",
+                unsafe_allow_html=True,
+            )
+
+    st.divider()
+
+    # ── Session controls
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        if st.button("💬 New Chat", use_container_width=True):
+            # Reset chat but keep documents indexed
+            st.session_state.messages = []
+            if st.session_state.rag_chain:
+                st.session_state.rag_chain.reset()
+            st.rerun()
+
+    with col_b:
+        if st.button("🗑️ Clear All", use_container_width=True):
+            # Wipe everything — documents, chat, Pinecone namespace
+            with st.spinner("Clearing session…"):
+                if st.session_state.vs_manager:
+                    st.session_state.vs_manager.delete_namespace(
+                        st.session_state.session_id
+                    )
+                # Reset all session state
+                for key in ["messages", "rag_chain", "processed_files", "vs_manager"]:
+                    st.session_state[key] = [] if key in ["messages", "processed_files"] else None
+                st.session_state.session_id = str(uuid.uuid4())[:8]
+                st.rerun()
+
+    # ── Export button (only if there are messages)
+    if st.session_state.messages:
+        st.divider()
+        export_md = export_conversation(st.session_state.messages)
+        st.download_button(
+            label="📥 Export Conversation",
+            data=export_md,
+            file_name=f"ragnarok_chat_{st.session_state.session_id}.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+
+    # ── Session ID (footer)
+    st.markdown(
+        f"<div style='position:fixed; bottom:1rem; font-size:0.7rem; color:#374151;'>"
+        f"Session: {st.session_state.session_id}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ── Main Area ─────────────────────────────────────────────────────────────────
+st.markdown(
+    '<div class="ragnarok-title">⚡ RAGNAROK</div>', unsafe_allow_html=True
+)
+st.markdown(
+    '<div class="ragnarok-subtitle">Multi-Document Intelligence Engine</div>',
+    unsafe_allow_html=True,
+)
+
+# ── Empty State ───────────────────────────────────────────────────────────────
+if not st.session_state.processed_files:
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown(
+            "<div class='step-card'>"
+            "<div style='font-size:2rem;'>📤</div>"
+            "<h4 style='color:#a78bfa; margin:0.5rem 0;'>Step 1</h4>"
+            "<p style='color:#6b7280; font-size:0.85rem;'>Upload your PDFs from the sidebar. Multiple files supported.</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    with col2:
+        st.markdown(
+            "<div class='step-card'>"
+            "<div style='font-size:2rem;'>⚡</div>"
+            "<h4 style='color:#a78bfa; margin:0.5rem 0;'>Step 2</h4>"
+            "<p style='color:#6b7280; font-size:0.85rem;'>Click 'Index Documents' to embed and store in Pinecone.</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    with col3:
+        st.markdown(
+            "<div class='step-card'>"
+            "<div style='font-size:2rem;'>💬</div>"
+            "<h4 style='color:#a78bfa; margin:0.5rem 0;'>Step 3</h4>"
+            "<p style='color:#6b7280; font-size:0.85rem;'>Ask anything. Every answer cites the exact document and page.</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        "<br><p style='text-align:center; color:#374151; font-size:0.8rem;'>"
+        "Powered by GPT-4o · text-embedding-3-large · Pinecone Serverless · LangChain LCEL</p>",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+
+# ── Chat Interface ────────────────────────────────────────────────────────────
+
+# Render message history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+        # Show sources expander for assistant messages that have them
+        if msg["role"] == "assistant" and msg.get("sources"):
+            with st.expander("📖 View Sources", expanded=False):
+                st.markdown(
+                    format_sources_markdown(msg["sources"]),
+                    unsafe_allow_html=False,
+                )
+
+# Chat input
+if prompt := st.chat_input("Ask anything about your documents…"):
+
+    if st.session_state.rag_chain is None:
+        st.warning("Documents are still being indexed. Please wait a moment.")
+        st.stop()
+
+    # Show user message immediately
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Retrieve sources + stream answer
+    with st.chat_message("assistant"):
+        # Step 1: Retrieve (shows a subtle spinner while fetching)
+        with st.spinner("🔍 Searching documents…"):
+            try:
+                source_docs, standalone_q = st.session_state.rag_chain.retrieve(prompt)
+            except Exception as e:
+                st.error(f"Retrieval error: {e}")
+                st.stop()
+
+        # Step 2: Stream GPT-4o answer token by token
+        response_placeholder = st.empty()
+        full_response = ""
+
+        try:
+            for token in st.session_state.rag_chain.stream(standalone_q, source_docs):
+                full_response += token
+                # Trailing cursor while streaming
+                response_placeholder.markdown(full_response + "▌")
+
+            # Final render without cursor
+            response_placeholder.markdown(full_response)
+
+        except Exception as e:
+            st.error(f"Generation error: {e}")
+            st.stop()
+
+        # Step 3: Show sources
+        if source_docs:
+            with st.expander("📖 View Sources", expanded=False):
+                st.markdown(
+                    format_sources_markdown(source_docs),
+                    unsafe_allow_html=False,
+                )
+
+    # Persist to session state
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": full_response,
+        "sources": source_docs,
+    })
+
+    # Update RAG chain memory
+    st.session_state.rag_chain.update_history(prompt, full_response)
