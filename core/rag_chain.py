@@ -84,11 +84,9 @@ class RAGChain:
         )
 
         self.retriever = vectorstore.as_retriever(
-            search_type="mmr",
+            search_type="similarity",
             search_kwargs={
                 "k": config.RETRIEVER_K,
-                "fetch_k": config.RETRIEVER_FETCH_K,
-                "lambda_mult": config.MMR_LAMBDA,
             },
         )
 

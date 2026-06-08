@@ -5,7 +5,6 @@ Each file type gets a specialised handler for maximum accuracy.
 """
 
 import os
-import io
 import base64
 import tempfile
 from typing import List
@@ -61,9 +60,7 @@ class DocumentProcessor:
     def _process_pdf(self, uploaded_file) -> List[Document]:
         """
         Uses pdfplumber for superior extraction.
-        - Regular text: extracted and chunked normally
-        - Tables: converted to markdown and kept as complete chunks
-          so counting/querying works perfectly
+        Tables are converted to markdown and kept as complete chunks.
         """
         docs = []
 
@@ -75,15 +72,11 @@ class DocumentProcessor:
             with pdfplumber.open(tmp_path) as pdf:
                 for page_num, page in enumerate(pdf.pages):
 
-                    # ── Extract tables first ──────────────────────────────
                     tables = page.extract_tables()
-                    table_bboxes = [t.bbox for t in page.find_tables()] if tables else []
 
                     for table in tables:
                         if not table or not table[0]:
                             continue
-
-                        # Convert table to clean markdown
                         markdown = self._table_to_markdown(table)
                         if markdown:
                             docs.append(Document(
@@ -95,7 +88,6 @@ class DocumentProcessor:
                                 }
                             ))
 
-                    # ── Extract remaining text (excluding table areas) ─────
                     text = page.extract_text()
                     if text and text.strip():
                         text_chunks = self.splitter.split_text(text)
@@ -117,21 +109,14 @@ class DocumentProcessor:
     # ── CSV Handler ──────────────────────────────────────────────────────────
 
     def _process_csv(self, uploaded_file) -> List[Document]:
-        """
-        Reads CSV with pandas.
-        Splits into chunks of 50 rows each — header repeated in every chunk
-        so the model always knows what each column means.
-        """
+        """Reads CSV with pandas. Header repeated in every chunk."""
         df = pd.read_csv(uploaded_file)
         return self._dataframe_to_docs(df, uploaded_file.name)
 
     # ── Excel Handler ────────────────────────────────────────────────────────
 
     def _process_excel(self, uploaded_file) -> List[Document]:
-        """
-        Reads all sheets from Excel file.
-        Each sheet becomes its own set of chunks.
-        """
+        """Reads all sheets from Excel file."""
         docs = []
         xl = pd.ExcelFile(uploaded_file)
 
@@ -199,83 +184,86 @@ class DocumentProcessor:
 
     # ── Image / Handwriting Handler ──────────────────────────────────────────
 
-def _process_image(self, uploaded_file) -> List[Document]:
-    """
-    Sends image to GPT-4o Vision for transcription.
-    Handles scanned documents, handwriting, photos, diagrams.
-    """
-    try:
-        image_bytes = uploaded_file.read()
-        base64_image = base64.b64encode(image_bytes).decode("utf-8")
+    def _process_image(self, uploaded_file) -> List[Document]:
+        """
+        Sends image to GPT-4o Vision for transcription.
+        Handles scanned documents, handwriting, photos, diagrams.
+        Kept as one single chunk - never split - to preserve full context.
+        """
+        try:
+            image_bytes = uploaded_file.read()
+            base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
-        ext = uploaded_file.name.lower().split(".")[-1]
-        media_type_map = {
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "png": "image/png",
-            "webp": "image/webp",
-            "bmp": "image/bmp",
-        }
-        media_type = media_type_map.get(ext, "image/png")
+            ext = uploaded_file.name.lower().split(".")[-1]
+            media_type_map = {
+                "jpg": "image/jpeg",
+                "jpeg": "image/jpeg",
+                "png": "image/png",
+                "webp": "image/webp",
+                "bmp": "image/bmp",
+            }
+            media_type = media_type_map.get(ext, "image/png")
 
-        response = self.openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "You are analyzing an uploaded file. "
-                                "Please describe and transcribe ALL content "
-                                "visible in this image in complete detail. "
-                                "Include: all text, numbers, people's appearance "
-                                "and clothing, tables, diagrams, handwriting, "
-                                "colors, layout — everything you can see. "
-                                "Be exhaustive and thorough."
-                            ),
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{media_type};base64,{base64_image}",
-                                "detail": "high",
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "You are analyzing an uploaded image file. "
+                                    "Describe and transcribe ALL content visible "
+                                    "in complete detail. Include: all text, numbers, "
+                                    "people's appearance and clothing, expressions, "
+                                    "background, tables, diagrams, handwriting, "
+                                    "colors, layout - everything you can see. "
+                                    "Be exhaustive and thorough."
+                                ),
                             },
-                        },
-                    ],
-                }
-            ],
-            max_tokens=4096,
-        )
-
-        extracted_text = response.choices[0].message.content
-
-        # Store as one single chunk — don't split image descriptions
-        # Splitting loses context about what the whole image shows
-        return [
-            Document(
-                page_content=f"[IMAGE CONTENT FROM: {uploaded_file.name}]\n\n{extracted_text}",
-                metadata={
-                    "source_file": uploaded_file.name,
-                    "page": 0,
-                    "type": "image",
-                }
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{media_type};base64,{base64_image}",
+                                    "detail": "high",
+                                },
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=4096,
             )
-        ]
 
-    except Exception as e:
-        # Return a document explaining the failure so it shows in the UI
-        return [
-            Document(
-                page_content=f"Image processing failed for {uploaded_file.name}: {str(e)}",
-                metadata={
-                    "source_file": uploaded_file.name,
-                    "page": 0,
-                    "type": "error",
-                }
-            )
-        ]
+            extracted_text = response.choices[0].message.content
+
+            return [
+                Document(
+                    page_content=(
+                        f"[IMAGE FILE: {uploaded_file.name}]\n\n"
+                        f"{extracted_text}"
+                    ),
+                    metadata={
+                        "source_file": uploaded_file.name,
+                        "page": 0,
+                        "type": "image",
+                    }
+                )
+            ]
+
+        except Exception as e:
+            return [
+                Document(
+                    page_content=(
+                        f"Image processing failed for {uploaded_file.name}: {str(e)}"
+                    ),
+                    metadata={
+                        "source_file": uploaded_file.name,
+                        "page": 0,
+                        "type": "error",
+                    }
+                )
+            ]
 
     # ── Shared Utilities ─────────────────────────────────────────────────────
 
@@ -287,25 +275,28 @@ def _process_image(self, uploaded_file) -> List[Document]:
         rows_per_chunk: int = 50,
     ) -> List[Document]:
         """
-        Converts a DataFrame into Document chunks.
-        Header is repeated in every chunk so model always
-        knows what each column means — critical for accuracy.
+        Converts DataFrame into Document chunks.
+        Header repeated in every chunk for accuracy.
+        Total row count included so model can answer counting questions.
         """
         df = df.fillna("").astype(str)
         header = df.columns.tolist()
         docs = []
+        total_rows = len(df)
 
-        source_label = f"{filename}" + (f" (Sheet: {sheet_label})" if sheet_label else "")
+        source_label = filename
+        if sheet_label:
+            source_label += f" (Sheet: {sheet_label})"
 
-        for start in range(0, len(df), rows_per_chunk):
+        for start in range(0, total_rows, rows_per_chunk):
             chunk_df = df.iloc[start:start + rows_per_chunk]
             markdown = chunk_df.to_markdown(index=False)
 
-            # Prepend column info and row range for context
             content = (
                 f"File: {source_label}\n"
-                f"Rows {start + 1} to {min(start + rows_per_chunk, len(df))} "
-                f"of {len(df)} total rows\n"
+                f"Total rows in this file: {total_rows}\n"
+                f"This chunk contains rows {start + 1} to "
+                f"{min(start + rows_per_chunk, total_rows)}\n"
                 f"Columns: {', '.join(header)}\n\n"
                 f"{markdown}"
             )
@@ -317,8 +308,8 @@ def _process_image(self, uploaded_file) -> List[Document]:
                     "page": 0,
                     "type": "table",
                     "row_start": start + 1,
-                    "row_end": min(start + rows_per_chunk, len(df)),
-                    "total_rows": len(df),
+                    "row_end": min(start + rows_per_chunk, total_rows),
+                    "total_rows": total_rows,
                 }
             ))
 
@@ -326,7 +317,7 @@ def _process_image(self, uploaded_file) -> List[Document]:
 
     @staticmethod
     def _table_to_markdown(table: list) -> str:
-        """Convert a pdfplumber table (list of lists) to markdown."""
+        """Convert a pdfplumber table (list of lists) to clean markdown."""
         if not table or not table[0]:
             return ""
 
@@ -341,8 +332,8 @@ def _process_image(self, uploaded_file) -> List[Document]:
         md_lines = []
         md_lines.append("| " + " | ".join(header) + " |")
         md_lines.append("| " + " | ".join(["---"] * len(header)) + " |")
+
         for row in rows:
-            # Pad row if it has fewer columns than header
             while len(row) < len(header):
                 row.append("")
             md_lines.append("| " + " | ".join(row) + " |")
