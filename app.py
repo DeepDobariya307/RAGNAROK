@@ -89,8 +89,8 @@ with st.sidebar:
     # ── File Upload
     st.markdown("**📂 Upload Documents**")
     uploaded_files = st.file_uploader(
-        label="Upload PDFs",
-        type=["pdf"],
+        label="Upload Files",
+        type=["pdf", "csv", "xlsx", "xls", "docx", "txt", "png", "jpg", "jpeg", "webp"],
         accept_multiple_files=True,
         label_visibility="collapsed",
         help="Upload one or more PDF files to query across",
@@ -122,7 +122,9 @@ with st.sidebar:
 
                     st.success(
                         f"✅ {summary['total_chunks']} chunks indexed across "
-                        f"{summary['file_count']} file(s)!"
+                        f"{summary['file_count']} file(s) "
+                        f"({summary['table_chunks']} table chunks, "
+                        f"{summary['image_chunks']} image chunks)!"
                     )
                 except Exception as e:
                     st.error(f"Indexing failed: {e}")
