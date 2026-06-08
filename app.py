@@ -9,12 +9,13 @@ import uuid
 
 import streamlit as st
 from dotenv import load_dotenv
+from langchain_core.messages import AIMessage, HumanMessage
 
 from core import DocumentProcessor, RAGChain, VectorStoreManager
 from ui.styles import apply_styles
 from utils.helpers import export_conversation, format_sources_markdown
 
-# ── Bootstrap ────────────────────────────────────────────────────────────────
+# ── Bootstrap ─────────────────────────────────────────────────────────────────
 load_dotenv()
 
 st.set_page_config(
@@ -29,11 +30,12 @@ st.set_page_config(
 apply_styles()
 
 
-# ── Session State Initialisation ─────────────────────────────────────────────
+# ── Session State Initialisation ──────────────────────────────────────────────
 def init_session():
     defaults = {
         "session_id": str(uuid.uuid4())[:8],
-        "messages": [],
+        "messages": [],          # UI chat history (dicts)
+        "chat_history": [],      # LangChain message history (HumanMessage/AIMessage)
         "rag_chain": None,
         "processed_files": [],
         "vs_manager": None,
@@ -47,21 +49,21 @@ def init_session():
 init_session()
 
 
-# ── API Key Validation ────────────────────────────────────────────────────────
+# ── API Key Validation ─────────────────────────────────────────────────────────
 def check_api_keys() -> bool:
     ok = bool(os.getenv("OPENAI_API_KEY")) and bool(os.getenv("PINECONE_API_KEY"))
     st.session_state.api_keys_ok = ok
     return ok
 
 
-# ── Vector Store (lazy init) ──────────────────────────────────────────────────
+# ── Vector Store (lazy init) ───────────────────────────────────────────────────
 def get_vs_manager() -> VectorStoreManager:
     if st.session_state.vs_manager is None:
         st.session_state.vs_manager = VectorStoreManager()
     return st.session_state.vs_manager
 
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚡ RAGNAROK")
     st.markdown(
@@ -94,7 +96,6 @@ with st.sidebar:
         help="Upload one or more PDF files to query across",
     )
 
-    # Detect genuinely new files (not yet indexed)
     new_files = [
         f for f in (uploaded_files or [])
         if f.name not in st.session_state.processed_files
@@ -139,14 +140,12 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Session controls
     col_a, col_b = st.columns(2)
 
     with col_a:
         if st.button("💬 New Chat", use_container_width=True):
             st.session_state.messages = []
-            if st.session_state.rag_chain:
-                st.session_state.rag_chain.reset()
+            st.session_state.chat_history = []
             st.rerun()
 
     with col_b:
@@ -156,12 +155,14 @@ with st.sidebar:
                     st.session_state.vs_manager.delete_namespace(
                         st.session_state.session_id
                     )
-                for key in ["messages", "rag_chain", "processed_files", "vs_manager"]:
-                    st.session_state[key] = [] if key in ["messages", "processed_files"] else None
+                st.session_state.messages = []
+                st.session_state.chat_history = []
+                st.session_state.rag_chain = None
+                st.session_state.processed_files = []
+                st.session_state.vs_manager = None
                 st.session_state.session_id = str(uuid.uuid4())[:8]
                 st.rerun()
 
-    # ── Export button
     if st.session_state.messages:
         st.divider()
         export_md = export_conversation(st.session_state.messages)
@@ -173,7 +174,6 @@ with st.sidebar:
             use_container_width=True,
         )
 
-    # ── Session ID footer
     st.markdown(
         f"<div style='position:fixed; bottom:1rem; font-size:0.7rem; color:#374151;'>"
         f"Session: {st.session_state.session_id}</div>",
@@ -181,34 +181,32 @@ with st.sidebar:
     )
 
 
-# ── Main Area ─────────────────────────────────────────────────────────────────
-st.markdown(
-    '<div class="ragnarok-title">⚡ RAGNAROK</div>', unsafe_allow_html=True
-)
+# ── Main Area ──────────────────────────────────────────────────────────────────
+st.markdown('<div class="ragnarok-title">⚡ RAGNAROK</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="ragnarok-subtitle">Multi-Document Intelligence Engine</div>',
     unsafe_allow_html=True,
 )
 
-# ── Empty State ───────────────────────────────────────────────────────────────
+# ── Empty State ────────────────────────────────────────────────────────────────
 if not st.session_state.processed_files:
     st.markdown("<br>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
 
-    card_style = """
-        background:#1a1a2e;
-        border:1px solid rgba(124,58,237,0.25);
-        border-radius:14px;
-        padding:2rem 1.2rem;
-        text-align:center;
-        height:190px;
-        display:flex;
-        flex-direction:column;
-        justify-content:center;
-        align-items:center;
-        gap:0.6rem;
-    """
+    card_style = (
+        "background:#1a1a2e;"
+        "border:1px solid rgba(124,58,237,0.25);"
+        "border-radius:14px;"
+        "padding:2rem 1.2rem;"
+        "text-align:center;"
+        "height:190px;"
+        "display:flex;"
+        "flex-direction:column;"
+        "justify-content:center;"
+        "align-items:center;"
+        "gap:0.6rem;"
+    )
 
     with col1:
         st.markdown(
@@ -249,11 +247,10 @@ if not st.session_state.processed_files:
     st.stop()
 
 
-# ── Chat Interface ────────────────────────────────────────────────────────────
+# ── Chat Interface ─────────────────────────────────────────────────────────────
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-
         if msg["role"] == "assistant" and msg.get("sources"):
             with st.expander("📖 View Sources", expanded=False):
                 st.markdown(
@@ -261,30 +258,39 @@ for msg in st.session_state.messages:
                     unsafe_allow_html=False,
                 )
 
-# Chat input
 if prompt := st.chat_input("Ask anything about your documents…"):
 
     if st.session_state.rag_chain is None:
-        st.warning("Documents are still being indexed. Please wait a moment.")
+        st.warning("Please upload and index documents first.")
         st.stop()
 
+    # Show user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        # Retrieve with current chat history from session state
         with st.spinner("🔍 Searching documents…"):
             try:
-                source_docs, standalone_q = st.session_state.rag_chain.retrieve(prompt)
+                source_docs, standalone_q = st.session_state.rag_chain.retrieve(
+                    prompt,
+                    st.session_state.chat_history,
+                )
             except Exception as e:
                 st.error(f"Retrieval error: {e}")
                 st.stop()
 
+        # Stream answer
         response_placeholder = st.empty()
         full_response = ""
 
         try:
-            for token in st.session_state.rag_chain.stream(standalone_q, source_docs):
+            for token in st.session_state.rag_chain.stream(
+                standalone_q,
+                source_docs,
+                st.session_state.chat_history,
+            ):
                 full_response += token
                 response_placeholder.markdown(full_response + "▌")
 
@@ -301,10 +307,17 @@ if prompt := st.chat_input("Ask anything about your documents…"):
                     unsafe_allow_html=False,
                 )
 
+    # Save to UI history
     st.session_state.messages.append({
         "role": "assistant",
         "content": full_response,
         "sources": source_docs,
     })
 
-    st.session_state.rag_chain.update_history(prompt, full_response)
+    # ── Update chat_history in session_state directly
+    st.session_state.chat_history.append(HumanMessage(content=prompt))
+    st.session_state.chat_history.append(AIMessage(content=full_response))
+
+    # Keep last 10 messages (5 turns)
+    if len(st.session_state.chat_history) > 10:
+        st.session_state.chat_history = st.session_state.chat_history[-10:]
