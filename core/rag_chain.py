@@ -71,7 +71,7 @@ QA_PROMPT = ChatPromptTemplate.from_messages([
 
 class RAGChain:
     """
-    Stateless RAG chain — chat_history is passed in explicitly each call.
+    Stateless RAG chain - chat_history is passed in explicitly each call.
     This makes it robust to Streamlit reruns and HuggingFace container restarts.
     """
 
