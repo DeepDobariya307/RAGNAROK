@@ -54,10 +54,6 @@ When asked to count items (like number of applications, rows, entries),
 carefully scan every single source chunk provided and count methodically.
 List what you find before giving a total.
 
-CONTEXT:
-{context}
-"""
-
 CONTEXT FROM DOCUMENTS:
 {context}
 
