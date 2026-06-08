@@ -199,13 +199,12 @@ class DocumentProcessor:
 
     # ── Image / Handwriting Handler ──────────────────────────────────────────
 
-    def _process_image(self, uploaded_file) -> List[Document]:
-        """
-        Sends image to GPT-4o Vision.
-        Handles: scanned documents, handwritten notes, screenshots,
-                 diagrams, photos of whiteboards — anything visual.
-        GPT-4o transcribes and describes the full content.
-        """
+def _process_image(self, uploaded_file) -> List[Document]:
+    """
+    Sends image to GPT-4o Vision for transcription.
+    Handles scanned documents, handwriting, photos, diagrams.
+    """
+    try:
         image_bytes = uploaded_file.read()
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
@@ -228,11 +227,13 @@ class DocumentProcessor:
                         {
                             "type": "text",
                             "text": (
-                                "Please transcribe and extract ALL content from this image. "
-                                "Include all text, numbers, tables, labels, and any other "
-                                "information visible. If it is handwritten, transcribe it "
-                                "exactly. If it contains a table, reproduce it in markdown "
-                                "format. Be thorough and complete."
+                                "You are analyzing an uploaded file. "
+                                "Please describe and transcribe ALL content "
+                                "visible in this image in complete detail. "
+                                "Include: all text, numbers, people's appearance "
+                                "and clothing, tables, diagrams, handwriting, "
+                                "colors, layout — everything you can see. "
+                                "Be exhaustive and thorough."
                             ),
                         },
                         {
@@ -250,17 +251,30 @@ class DocumentProcessor:
 
         extracted_text = response.choices[0].message.content
 
-        chunks = self.splitter.split_text(extracted_text)
+        # Store as one single chunk — don't split image descriptions
+        # Splitting loses context about what the whole image shows
         return [
             Document(
-                page_content=chunk,
+                page_content=f"[IMAGE CONTENT FROM: {uploaded_file.name}]\n\n{extracted_text}",
                 metadata={
                     "source_file": uploaded_file.name,
                     "page": 0,
                     "type": "image",
                 }
             )
-            for chunk in chunks if chunk.strip()
+        ]
+
+    except Exception as e:
+        # Return a document explaining the failure so it shows in the UI
+        return [
+            Document(
+                page_content=f"Image processing failed for {uploaded_file.name}: {str(e)}",
+                metadata={
+                    "source_file": uploaded_file.name,
+                    "page": 0,
+                    "type": "error",
+                }
+            )
         ]
 
     # ── Shared Utilities ─────────────────────────────────────────────────────
