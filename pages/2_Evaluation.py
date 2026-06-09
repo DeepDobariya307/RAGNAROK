@@ -78,9 +78,11 @@ if run_eval:
         st.stop()
 
     try:
-        # Patch broken vertexai import that ragas hardcodes
         import sys
         from types import ModuleType
+        from unittest.mock import MagicMock
+
+        # Patch 1: broken vertexai import in ragas
         if 'langchain_community.chat_models.vertexai' not in sys.modules:
             _fake = ModuleType('langchain_community.chat_models.vertexai')
             class _FakeChatVertexAI:
@@ -88,9 +90,12 @@ if run_eval:
             _fake.ChatVertexAI = _FakeChatVertexAI
             sys.modules['langchain_community.chat_models.vertexai'] = _fake
 
+        # Patch 2: pydantic_v1 was removed in langchain-core>=0.3
+        sys.modules.setdefault('langchain_core.pydantic_v1', MagicMock())
+
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.metrics.collections import (
+        from ragas.metrics import (
             faithfulness,
             answer_relevancy,
             context_precision,
