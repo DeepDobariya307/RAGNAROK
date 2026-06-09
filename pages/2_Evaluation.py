@@ -78,19 +78,25 @@ if run_eval:
         st.stop()
 
     try:
-        # Lazy import so the main app loads fast even without ragas installed
+        # Patch broken vertexai import that ragas hardcodes
+        import sys
+        from types import ModuleType
+        if 'langchain_community.chat_models.vertexai' not in sys.modules:
+            _fake = ModuleType('langchain_community.chat_models.vertexai')
+            class _FakeChatVertexAI:
+                pass
+            _fake.ChatVertexAI = _FakeChatVertexAI
+            sys.modules['langchain_community.chat_models.vertexai'] = _fake
+
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.metrics import (
+        from ragas.metrics.collections import (
             faithfulness,
             answer_relevancy,
-            context_relevancy,
+            context_precision,
         )
-    except ImportError:
-        st.error(
-            "RAGAS or HuggingFace Datasets not installed. "
-            "Run: `pip install ragas datasets`"
-        )
+    except ImportError as e:
+        st.error(f"RAGAS import failed: {e}")
         st.stop()
 
     progress = st.progress(0, text="Preparing evaluation…")
@@ -112,7 +118,7 @@ if run_eval:
 
             # Collect full (non-streamed) answer for evaluation
             answer = ""
-            for chunk in st.session_state.rag_chain.stream(standalone_q, docs):
+            for chunk in st.session_state.rag_chain.stream(standalone_q, docs, []):
                 answer += chunk
 
             eval_data["question"].append(q)
@@ -133,7 +139,7 @@ if run_eval:
         dataset = Dataset.from_dict(eval_data)
         results = evaluate(
             dataset,
-            metrics=[faithfulness, answer_relevancy, context_relevancy],
+            metrics=[faithfulness, answer_relevancy, context_precision],
         )
 
         progress.empty()
@@ -163,12 +169,12 @@ if run_eval:
             )
 
         with m3:
-            score = results.get("context_relevancy", 0)
+            score = results.get("context_precision", 0)
             st.metric(
-                "Context Relevancy",
+                "Context Precision",
                 f"{score:.3f}",
                 delta="Good" if score > 0.8 else ("Fair" if score > 0.6 else "Needs work"),
-                help="Is the retrieved context focused on the question?",
+                help="Is the retrieved context relevant to the question?",
             )
 
         # ── Per-question breakdown
@@ -177,12 +183,12 @@ if run_eval:
 
         result_df = results.to_pandas()
         display_cols = [
-            c for c in ["question", "answer", "faithfulness", "answer_relevancy", "context_relevancy"]
+            c for c in ["question", "answer", "faithfulness", "answer_relevancy", "context_precision"]
             if c in result_df.columns
         ]
         st.dataframe(
             result_df[display_cols].style.format(
-                {c: "{:.3f}" for c in ["faithfulness", "answer_relevancy", "context_relevancy"] if c in result_df.columns}
+                {c: "{:.3f}" for c in ["faithfulness", "answer_relevancy", "context_precision"] if c in result_df.columns}
             ),
             use_container_width=True,
         )
