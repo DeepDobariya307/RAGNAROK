@@ -81,7 +81,11 @@ if run_eval:
         # Lazy import so the main app loads fast even without ragas installed
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.metrics import answer_relevancy, context_relevancy, faithfulness
+        from ragas.metrics import (
+            faithfulness,
+            answer_relevancy,
+            context_relevancy,
+        )
     except ImportError:
         st.error(
             "RAGAS or HuggingFace Datasets not installed. "
@@ -104,7 +108,7 @@ if run_eval:
         )
 
         try:
-            docs, standalone_q = st.session_state.rag_chain.retrieve(q)
+            docs, standalone_q = st.session_state.rag_chain.retrieve(q, [])
 
             # Collect full (non-streamed) answer for evaluation
             answer = ""
