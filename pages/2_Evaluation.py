@@ -156,7 +156,7 @@ if run_eval:
         m1, m2, m3 = st.columns(3)
 
         with m1:
-            score = results.get("faithfulness", 0)
+            score = float(results["faithfulness"][0]) if "faithfulness" in results._scores_dict else 0
             st.metric(
                 "Faithfulness",
                 f"{score:.3f}",
@@ -165,7 +165,7 @@ if run_eval:
             )
 
         with m2:
-            score = results.get("answer_relevancy", 0)
+            score = float(results["answer_relevancy"][0]) if "answer_relevancy" in results._scores_dict else 0
             st.metric(
                 "Answer Relevancy",
                 f"{score:.3f}",
@@ -174,7 +174,7 @@ if run_eval:
             )
 
         with m3:
-            score = results.get("context_precision", 0)
+            score = float(results["context_precision"][0]) if "context_precision" in results._scores_dict else 0
             st.metric(
                 "Context Precision",
                 f"{score:.3f}",
