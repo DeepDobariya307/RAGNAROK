@@ -151,12 +151,21 @@ if run_eval:
         st.success(f"✅ Evaluation complete on {len(eval_data['question'])} question(s)!")
         st.divider()
 
-        # ── Summary metrics
+# ── Summary metrics (averages across all questions)
+        result_df = results.to_pandas()
+        display_cols = [
+            c for c in ["question", "answer", "faithfulness", "answer_relevancy", "context_precision"]
+            if c in result_df.columns
+        ]
+        metric_cols = [c for c in ["faithfulness", "answer_relevancy", "context_precision"] if c in result_df.columns]
+
         st.markdown("### 📈 Overall Scores")
+        if len(eval_data["question"]) > 1:
+            st.caption(f"Averages across {len(eval_data['question'])} questions")
         m1, m2, m3 = st.columns(3)
 
         with m1:
-            score = float(results["faithfulness"][0]) if "faithfulness" in results._scores_dict else 0
+            score = result_df["faithfulness"].mean() if "faithfulness" in result_df.columns else 0
             st.metric(
                 "Faithfulness",
                 f"{score:.3f}",
@@ -165,7 +174,7 @@ if run_eval:
             )
 
         with m2:
-            score = float(results["answer_relevancy"][0]) if "answer_relevancy" in results._scores_dict else 0
+            score = result_df["answer_relevancy"].mean() if "answer_relevancy" in result_df.columns else 0
             st.metric(
                 "Answer Relevancy",
                 f"{score:.3f}",
@@ -174,7 +183,7 @@ if run_eval:
             )
 
         with m3:
-            score = float(results["context_precision"][0]) if "context_precision" in results._scores_dict else 0
+            score = result_df["context_precision"].mean() if "context_precision" in result_df.columns else 0
             st.metric(
                 "Context Precision",
                 f"{score:.3f}",
