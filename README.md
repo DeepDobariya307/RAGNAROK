@@ -93,7 +93,7 @@ pinned: false
 | 📊 **RAGAS Evaluation** | Built-in pipeline quality dashboard (Faithfulness, Relevancy) |
 | 💾 **Session Isolation** | Pinecone namespaces keep your docs private per session |
 | 📥 **Export** | Download full conversations as Markdown |
-| 🚀 **Railway Deploy** | One-click deployment with Docker |
+| 🚀 **Hugging Face Deploy** | One-click deployment with Docker |
 
 ---
 
