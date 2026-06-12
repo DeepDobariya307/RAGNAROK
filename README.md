@@ -107,7 +107,7 @@ pinned: false
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/RAGNAROK.git
+git clone https://github.com/DeepDobariya307/RAGNAROK.git
 cd RAGNAROK
 
 python -m venv venv
