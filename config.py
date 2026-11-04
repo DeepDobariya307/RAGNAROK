@@ -19,6 +19,7 @@ class Config:
     # Chunking
     CHUNK_SIZE: int = 800          # characters per passage
     CHUNK_OVERLAP: int = 150
+    SPREADSHEET_ROWS_PER_CHUNK: int = 5   # small blocks so a single row can be found
 
     # Retrieval (defaults; each user can change them in Settings)
     RETRIEVER_K: int = 8           # passages given to the model

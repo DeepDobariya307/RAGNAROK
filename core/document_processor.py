@@ -311,13 +311,14 @@ class DocumentProcessor:
         df: pd.DataFrame,
         filename: str,
         sheet_label: str = None,
-        rows_per_chunk: int = 50,
+        rows_per_chunk: int = None,
     ) -> List[Document]:
         """
         Converts DataFrame into Document chunks.
         Header repeated in every chunk for accuracy.
         Total row count included so model can answer counting questions.
         """
+        rows_per_chunk = rows_per_chunk or config.SPREADSHEET_ROWS_PER_CHUNK
         df = df.fillna("").astype(str)
         header = df.columns.tolist()
         docs = []
