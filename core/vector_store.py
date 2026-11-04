@@ -84,15 +84,6 @@ class VectorStoreManager:
 
     # ── Document operations ──────────────────────────────────────────────────
 
-    def add_documents(self, docs: List[Document], namespace: str) -> PineconeVectorStore:
-        """
-        Embed and upsert a list of Document chunks into a namespace.
-        Returns the PineconeVectorStore instance for immediate use.
-        """
-        vectorstore = self.get_vectorstore(namespace)
-        vectorstore.add_documents(docs)
-        return vectorstore
-
     def upsert(self, docs: List[Document], namespace: str) -> List[str]:
         """Embed and upsert chunks; returns their vector IDs so a file can be removed later."""
         return self.get_vectorstore(namespace).add_documents(docs)
@@ -141,6 +132,11 @@ class VectorStoreManager:
         """Remove specific vectors (one file's chunks). Serverless supports delete-by-id."""
         for start in range(0, len(ids), 1000):
             self.index.delete(ids=ids[start:start + 1000], namespace=namespace)
+
+    def list_namespaces(self) -> List[str]:
+        stats = self.index.describe_index_stats()
+        namespaces = _field(stats, "namespaces") or {}
+        return list(namespaces.keys() if hasattr(namespaces, "keys") else namespaces)
 
     def delete_namespace(self, namespace: str):
         """

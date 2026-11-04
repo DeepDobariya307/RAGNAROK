@@ -30,5 +30,16 @@ class Config:
     TEMPERATURE: float = 0.0       # deterministic, factual answers
     MEMORY_WINDOW: int = 5         # previous turns used to rewrite follow-ups
 
+    # Limits that keep a public demo from running up the OpenAI bill (per visitor IP)
+    MAX_FILE_MB: int = 25
+    MAX_DOCS_PER_SESSION: int = 20
+    QUESTIONS_PER_10_MIN: int = 30
+    FILES_PER_HOUR: int = 30
+    EVALS_PER_HOUR: int = 5
+
+    # Sessions live in memory; their Pinecone data is deleted after this long
+    SESSION_IDLE_HOURS: int = 6
+    NAMESPACE_MAX_AGE_HOURS: int = 24   # cleans up after restarts, when memory is lost
+
 
 config = Config()

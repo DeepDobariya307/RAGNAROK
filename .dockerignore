@@ -4,3 +4,5 @@ venv/
 .vscode/
 __pycache__/
 *.pyc
+tests/
+requirements-dev.txt

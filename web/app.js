@@ -447,6 +447,9 @@
           if (local.messages[local.messages.length - 1].role === 'pending') { local.messages.pop(); local.messages.push(bot); }
           bot.streaming = false; bot.trace = data.trace;
           for (const [i, h] of Object.entries(data.highlights || {})) if (bot.sources[+i]) bot.sources[+i].hl = h;
+          if (S.src && S.src.key === `${S.active}:${local.messages.length - 1}`) {
+            renderThread(); openSource(S.src.key, S.src.d);       // a source opened mid-answer gets its highlight now
+          }
         } else if (ev === 'error') {
           throw new Error(data.message);
         }

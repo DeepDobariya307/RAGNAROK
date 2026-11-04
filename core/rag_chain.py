@@ -43,7 +43,7 @@ Answer questions using ONLY the document context provided below.
 
 RULES:
 1. Use ONLY the provided context. Never use outside knowledge.
-2. Cite sources inline: [Source N: filename, Page X]
+2. Cite sources inline as [Source N], using the source numbers in the context.
 3. For counting or listing tasks, go through ALL provided sources carefully.
 4. If you are uncertain or the context seems incomplete, say so explicitly.
 5. Never guess or estimate — only state what is clearly present in the context.
@@ -128,10 +128,14 @@ class RAGChain:
 
     @staticmethod
     def _format_context(docs: List[Document]) -> str:
-        """Format retrieved chunks with numbered source labels."""
+        """Number the retrieved chunks; page numbers only where the file has pages (PDF)."""
         sections = []
         for i, doc in enumerate(docs, start=1):
-            filename = doc.metadata.get("source_file", "Unknown Document")
-            page = int(doc.metadata.get("page", 0) or 0) + 1
-            sections.append(f"[Source {i}: {filename}, Page {page}]\n{doc.page_content}")
+            meta = doc.metadata
+            label = meta.get("source_file", "Unknown document")
+            if label.lower().endswith(".pdf"):
+                label += f", page {int(meta.get('page', 0) or 0) + 1}"
+            if meta.get("sheet"):
+                label += f", sheet {meta['sheet']}"
+            sections.append(f"[Source {i}: {label}]\n{doc.page_content}")
         return "\n\n─────────────────────────\n\n".join(sections)

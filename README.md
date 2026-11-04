@@ -74,9 +74,19 @@ core/
   highlight.py            Finds the source sentence each claim relies on
   evaluation.py           RAGAS scoring
 web/             The interface (HTML, CSS, JavaScript)
+tests/           Offline tests (no API keys needed)
 start.bat        One-click start on Windows
 Dockerfile       Used by Hugging Face Spaces
 ```
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The tests run offline. They cover the table clean-up (using the exact rows that broke on a real two-column university regulation PDF), PDF reading end to end on generated PDFs (tables stored once, captions, tables continuing across pages, two-column reading order), the source-sentence matching, and the server's rate limits and clean-up.
 
 ## Tech stack
 
@@ -97,10 +107,13 @@ Dockerfile       Used by Hugging Face Spaces
 2. Push this repository to it.
 3. In the Space's **Settings → Secrets**, add `OPENAI_API_KEY` and `PINECONE_API_KEY`.
 
+Because a public demo spends your OpenAI credits, each visitor is limited (by IP) to 30 questions per 10 minutes, 30 uploaded files per hour and 5 evaluation runs per hour, with at most 25 MB per file and 20 documents per session. All limits are in `config.py`.
+
 ## Limitations and next steps
 
 - **Counting and filtering** ("how many applications in May?") are unreliable: retrieval returns the few best passages, but counting needs every matching row. Next step: route such questions to a structured query over the spreadsheet (text-to-SQL) instead of retrieval.
 - **Exact names and codes** ("ZEISS", "13602") can be missed by meaning-based search. Next step: hybrid search (keyword + vector).
 - **Tables without ruling lines** in PDFs are read as text lines rather than as tables, and scanned PDFs (images of pages) are not OCR'd.
-- Chats and uploaded documents are kept in server memory, so a restart clears them.
+- Chats and uploaded documents are kept in server memory, so a restart clears them. Their Pinecone data is deleted automatically once it is older than a day.
+- RAGAS is pinned to 0.2.0 for reproducible scores. That version's reference-free context-precision metric reads a field it doesn't require, so `core/evaluation.py` patches it; moving to a newer RAGAS is on the list.
 - Questions about document metadata (for example "how many pages is each file?") aren't answered, because that information isn't in the text.

@@ -9,6 +9,7 @@ Spaces iframe where third-party cookies are often blocked). A restart drops all
 sessions; idle sessions are cleaned up, including their Pinecone namespace.
 """
 
+import calendar
 import csv
 import io
 import json
@@ -17,13 +18,15 @@ import re
 import threading
 import time
 import uuid
+from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import Body, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.documents import Document
@@ -38,13 +41,19 @@ WEB = Path(__file__).parent / "web"
 MODELS = ["gpt-4o", "gpt-4o-mini"]
 FILE_TYPES = {"pdf", "csv", "xlsx", "xls", "docx", "txt", "png", "jpg", "jpeg", "webp", "bmp"}
 IMAGE_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp", "bmp": "image/bmp"}
-MAX_FILE_MB = 200            # same as Streamlit's default upload limit
-SESSION_IDLE_S = 6 * 3600    # drop sessions (and their vectors) after 6 h idle
 SID_RE = re.compile(r"^[0-9a-f]{32}$")
-CITE_GROUP_RE = re.compile(r"\[([^\[\]]*?Source\s+\d+[^\[\]]*)\]")
-CITE_NUM_RE = re.compile(r"Source\s+(\d+)")
+NAMESPACE_RE = re.compile(r"^s-(?:(\d{10})-)?[0-9a-f]{32}$")     # s-<YYYYMMDDHH>-<session>; old: s-<session>
+CITE_GROUP_RE, CITE_NUM_RE = highlight.CITE_GROUP_RE, highlight.CITE_NUM_RE
 
-app = FastAPI(title="RAGNAROK", docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(_app):
+    if keys_ok():
+        threading.Thread(target=cleanup_namespaces, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="RAGNAROK", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 # ── Session state ─────────────────────────────────────────────────────────────
@@ -62,12 +71,14 @@ class Session:
         "lambda": config.MMR_LAMBDA,
     })
     eval: Optional[dict] = None
+    created: float = field(default_factory=time.time)
     last_seen: float = field(default_factory=time.time)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def namespace(self) -> str:
-        return f"s-{self.id}"
+        """Pinecone namespace; the creation hour in the name lets old data be found and deleted."""
+        return f"s-{time.strftime('%Y%m%d%H', time.gmtime(self.created))}-{self.id}"
 
 
 SESSIONS: Dict[str, Session] = {}
@@ -92,12 +103,70 @@ def vs() -> VectorStoreManager:
 def _reap_idle():
     now = time.time()
     with SESSIONS_LOCK:
-        stale = [s for s in SESSIONS.values() if now - s.last_seen > SESSION_IDLE_S]
+        stale = [s for s in SESSIONS.values() if now - s.last_seen > config.SESSION_IDLE_HOURS * 3600]
         for s in stale:
             SESSIONS.pop(s.id, None)
     for s in stale:
         if s.docs and _vs is not None:
             _vs.delete_namespace(s.namespace)
+    if now - _last_cleanup[0] > 3600:
+        cleanup_namespaces()
+
+
+_last_cleanup = [0.0]
+
+
+def cleanup_namespaces():
+    """
+    Delete Pinecone data of sessions that no longer exist. Sessions live in memory,
+    so after a restart their data would otherwise stay in Pinecone forever.
+    Only namespaces this app created (s-...) and older than NAMESPACE_MAX_AGE_HOURS are touched.
+    """
+    _last_cleanup[0] = time.time()
+    try:
+        live = {s.namespace for s in list(SESSIONS.values())}
+        for ns in vs().list_namespaces():
+            m = NAMESPACE_RE.match(ns)
+            if not m or ns in live:
+                continue
+            created = calendar.timegm(time.strptime(m.group(1), "%Y%m%d%H")) if m.group(1) else 0
+            if time.time() - created > config.NAMESPACE_MAX_AGE_HOURS * 3600:
+                vs().delete_namespace(ns)
+    except Exception:
+        pass   # housekeeping must never break the app
+
+
+class RateLimiter:
+    """At most `limit` events per `window` seconds per key (in-memory sliding window)."""
+
+    def __init__(self, limit: int, window: float):
+        self.limit, self.window = limit, window
+        self.events: Dict[str, deque] = defaultdict(deque)
+        self.lock = threading.Lock()
+
+    def allow(self, key: str, n: int = 1) -> bool:
+        now = time.time()
+        with self.lock:
+            q = self.events[key]
+            while q and now - q[0] > self.window:
+                q.popleft()
+            if len(q) + n > self.limit:
+                return False
+            q.extend([now] * n)
+            return True
+
+
+LIMITS = {
+    "question": RateLimiter(config.QUESTIONS_PER_10_MIN, 600),
+    "file": RateLimiter(config.FILES_PER_HOUR, 3600),
+    "eval": RateLimiter(config.EVALS_PER_HOUR, 3600),
+}
+
+
+def rate_limit(kind: str, request: Request, n: int = 1):
+    ip = request.client.host if request.client else "unknown"
+    if not LIMITS[kind].allow(ip, n):
+        raise HTTPException(429, "Too many requests from this address. Please wait a few minutes and try again.")
 
 
 def session(sid: Optional[str]) -> Session:
@@ -251,9 +320,13 @@ def get_chat(chat_id: str, x_session: str = Header(None)):
 
 
 @app.post("/api/documents")
-def add_documents(files: List[UploadFile] = File(...), x_session: str = Header(None)):
+def add_documents(request: Request, files: List[UploadFile] = File(...), x_session: str = Header(None)):
     s = session(x_session)
     need_keys()
+    new = [f for f in files if os.path.basename(f.filename or "") not in s.docs]
+    if len(s.docs) + len(new) > config.MAX_DOCS_PER_SESSION:
+        raise HTTPException(413, f"A session can hold up to {config.MAX_DOCS_PER_SESSION} documents.")
+    rate_limit("file", request, len(new))
     batch = []
     for f in files:
         name = os.path.basename(f.filename or "")
@@ -261,9 +334,9 @@ def add_documents(files: List[UploadFile] = File(...), x_session: str = Header(N
             raise HTTPException(415, f"Unsupported file: {name or '(unnamed)'}")
         if name in s.docs:
             continue
-        data = f.file.read(MAX_FILE_MB * 1024 * 1024 + 1)
-        if len(data) > MAX_FILE_MB * 1024 * 1024:
-            raise HTTPException(413, f"{name} is larger than {MAX_FILE_MB} MB")
+        data = f.file.read(config.MAX_FILE_MB * 1024 * 1024 + 1)
+        if len(data) > config.MAX_FILE_MB * 1024 * 1024:
+            raise HTTPException(413, f"{name} is larger than {config.MAX_FILE_MB} MB")
         batch.append((name, data))
     if not batch:
         return state_view(s)
@@ -284,7 +357,7 @@ def add_documents(files: List[UploadFile] = File(...), x_session: str = Header(N
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Indexing failed: {e}" + (f" (indexed {', '.join(added)} before the error)" if added else ""))
+        raise HTTPException(500, f"Indexing failed: {e}" + (f" (indexed {', '.join(added)} before the error)" if added else "")) from e
     return state_view(s)
 
 
@@ -344,9 +417,10 @@ def clear_session(x_session: str = Header(None)):
 
 
 @app.post("/api/ask")
-def ask(body: dict = Body(...), x_session: str = Header(None)):
+def ask(request: Request, body: dict = Body(...), x_session: str = Header(None)):
     s = session(x_session)
     need_keys()
+    rate_limit("question", request)
     question = str(body.get("question") or "").strip()
     if not question:
         raise HTTPException(400, "Empty question")
@@ -443,11 +517,12 @@ def export_chat(chat_id: str = Query(...), sid: str = Query(...)):
 
 
 @app.post("/api/eval")
-def run_eval(body: dict = Body(...), x_session: str = Header(None)):
+def run_eval(request: Request, body: dict = Body(...), x_session: str = Header(None)):
     from core import evaluation
 
     s = session(x_session)
     need_keys()
+    rate_limit("eval", request)
     questions = [q.strip() for q in str(body.get("questions") or "").splitlines() if q.strip()]
     if not questions:
         raise HTTPException(400, "Add at least one question")

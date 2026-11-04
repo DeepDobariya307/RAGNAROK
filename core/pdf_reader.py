@@ -192,7 +192,7 @@ def read_pdf(file_obj, filename: str, splitter, max_table_chars: int = 1600) -> 
 
             # Text without the tables, so table content is stored exactly once.
             if boxes:
-                page = page.filter(lambda obj: not any(_centre_inside(obj, b) for b in boxes))
+                page = page.filter(lambda obj, boxes=boxes: not any(_centre_inside(obj, b) for b in boxes))
             text = reading_order_text(page)
             for chunk in splitter.split_text(text) if text.strip() else []:
                 if chunk.strip():
