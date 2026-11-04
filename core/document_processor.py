@@ -5,6 +5,7 @@ Each file type gets a specialised handler for maximum accuracy.
 """
 
 import os
+import re
 import base64
 import tempfile
 from typing import List
@@ -88,7 +89,7 @@ class DocumentProcessor:
                                 }
                             ))
 
-                    text = page.extract_text()
+                    text = self._page_text(page)
                     if text and text.strip():
                         text_chunks = self.splitter.split_text(text)
                         for chunk in text_chunks:
@@ -105,6 +106,44 @@ class DocumentProcessor:
             os.unlink(tmp_path)
 
         return docs
+
+    # Words closer than this (in PDF points) count as one word. pdfplumber's
+    # default of 3 glues tightly set words together ("Identifiederrors,and…").
+    X_TOLERANCE = 1.5
+
+    @classmethod
+    def _page_text(cls, page) -> str:
+        """
+        Page text in reading order. Two-column pages (common in regulations,
+        papers and reports) are read left column first, then right; reading
+        straight across would interleave lines from both columns.
+        """
+        if cls._is_two_column(page):
+            mid = page.width / 2
+            left = page.crop((0, 0, mid, page.height)).extract_text(x_tolerance=cls.X_TOLERANCE) or ""
+            right = page.crop((mid, 0, page.width, page.height)).extract_text(x_tolerance=cls.X_TOLERANCE) or ""
+            text = left + "\n\n" + right
+        else:
+            text = page.extract_text(x_tolerance=cls.X_TOLERANCE) or ""
+        return cls._join_hyphenated(text)
+
+    @staticmethod
+    def _is_two_column(page) -> bool:
+        """Two columns = almost no words cross the page centre, and both halves hold text."""
+        words = page.extract_words()
+        if len(words) < 40:
+            return False
+        mid = page.width / 2
+        crossing = sum(1 for w in words if w["x0"] < mid - 5 and w["x1"] > mid + 5)
+        left = sum(1 for w in words if w["x1"] <= mid + 5)
+        right = sum(1 for w in words if w["x0"] >= mid - 5)
+        return crossing <= 0.015 * len(words) and min(left, right) >= 0.2 * len(words)
+
+    @staticmethod
+    def _join_hyphenated(text: str) -> str:
+        """Rejoin words split across lines: 'schriftli-\nche' -> 'schriftliche'.
+        Keeps real hyphens before 'und/oder/and/or' ('Prüfungs- und Studienordnung')."""
+        return re.sub(r"([A-Za-zÀ-ÖØ-öø-ÿ])-\n(?!(?:und|oder|bzw|and|or)\b)([a-zß-öø-ÿ])", r"\1\2", text)
 
     # ── CSV Handler ──────────────────────────────────────────────────────────
 
@@ -310,6 +349,8 @@ class DocumentProcessor:
                     "row_start": start + 1,
                     "row_end": min(start + rows_per_chunk, total_rows),
                     "total_rows": total_rows,
+                    # Pinecone rejects null metadata, so only set the sheet when there is one
+                    **({"sheet": sheet_label} if sheet_label else {}),
                 }
             ))
 

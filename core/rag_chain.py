@@ -1,25 +1,25 @@
 """
 RAGNAROK — RAG Chain (LCEL)
-Production-grade retrieval-augmented generation pipeline using LangChain LCEL.
+Retrieval-augmented generation pipeline using LangChain LCEL.
 
-Fix v2:
-- chat_history now passed explicitly (not stored internally)
-  so Streamlit session_state owns it — survives reruns reliably
-- Improved system prompt for higher accuracy
-- MMR retrieval tuned
+- chat_history is passed in explicitly (the caller owns it), so the chain is
+  stateless and safe to rebuild per request.
+- Model / k / fetch_k / MMR lambda are per-instance, not read from the global
+  config at call time, so one user's settings never leak into another's.
+- The three steps (rephrase, search, answer) are exposed separately so the UI
+  can time each one for the "How this was found" trace.
 """
 
 import os
-from typing import Iterator, List, Tuple
+from typing import Iterator, List, Optional, Tuple
 
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
-from langchain_pinecone import PineconeVectorStore
 
 from config import config
+from core.vector_store import VectorStoreManager
 
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
@@ -70,70 +70,61 @@ QA_PROMPT = ChatPromptTemplate.from_messages([
 # ── RAG Chain ──────────────────────────────────────────────────────────────────
 
 class RAGChain:
-    """
-    Stateless RAG chain - chat_history is passed in explicitly each call.
-    This makes it robust to Streamlit reruns and HuggingFace container restarts.
-    """
+    """Stateless RAG chain over one session's Pinecone namespace."""
 
-    def __init__(self, vectorstore: PineconeVectorStore):
+    def __init__(
+        self,
+        vs_manager: VectorStoreManager,
+        namespace: str,
+        *,
+        model: Optional[str] = None,
+        k: Optional[int] = None,
+        fetch_k: Optional[int] = None,
+        lambda_mult: Optional[float] = None,
+    ):
+        self.vs_manager = vs_manager
+        self.namespace = namespace
+        self.model = model or config.OPENAI_CHAT_MODEL
+        self.k = k or config.RETRIEVER_K
+        self.fetch_k = max(fetch_k or config.RETRIEVER_FETCH_K, self.k)
+        self.lambda_mult = config.MMR_LAMBDA if lambda_mult is None else lambda_mult
+
         self.llm = ChatOpenAI(
-            model=config.OPENAI_CHAT_MODEL,
+            model=self.model,
             temperature=config.TEMPERATURE,
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             streaming=True,
         )
-
-        self.retriever = vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={
-                "k": config.RETRIEVER_K,
-            },
-        )
-
-        self._contextualize_chain = (
-            CONTEXTUALIZE_PROMPT | self.llm | StrOutputParser()
-        )
+        self._contextualize_chain = CONTEXTUALIZE_PROMPT | self.llm | StrOutputParser()
         self._qa_chain = QA_PROMPT | self.llm | StrOutputParser()
 
     # ── Public interface ──────────────────────────────────────────────────────
 
-    def retrieve(
-        self,
-        question: str,
-        chat_history: List,
-    ) -> Tuple[List[Document], str]:
-        """
-        Contextualise question using history, then retrieve relevant chunks.
-        Returns (source_docs, standalone_question).
-        """
-        standalone_q = self._contextualize(question, chat_history)
-        docs = self.retriever.invoke(standalone_q)
+    def rephrase(self, question: str, chat_history: List) -> str:
+        """Rewrite a follow-up as a standalone question; first questions pass through."""
+        if not chat_history:
+            return question
+        return self._contextualize_chain.invoke({"question": question, "chat_history": chat_history})
+
+    def search(self, query: str) -> Tuple[List[Document], int]:
+        """MMR search. Returns (kept docs with metadata['score'], number fetched)."""
+        return self.vs_manager.mmr_search(query, self.namespace, self.k, self.fetch_k, self.lambda_mult)
+
+    def retrieve(self, question: str, chat_history: List) -> Tuple[List[Document], str]:
+        """Rephrase + search in one call. Returns (source_docs, standalone_question)."""
+        standalone_q = self.rephrase(question, chat_history)
+        docs, _ = self.search(standalone_q)
         return docs, standalone_q
 
-    def stream(
-        self,
-        question: str,
-        docs: List[Document],
-        chat_history: List,
-    ) -> Iterator[str]:
-        """Stream GPT-4o answer token by token."""
-        context = self._format_context(docs)
+    def stream(self, question: str, docs: List[Document], chat_history: List) -> Iterator[str]:
+        """Stream the answer token by token."""
         yield from self._qa_chain.stream({
             "question": question,
-            "context": context,
+            "context": self._format_context(docs),
             "chat_history": chat_history,
         })
 
     # ── Private helpers ───────────────────────────────────────────────────────
-
-    def _contextualize(self, question: str, chat_history: List) -> str:
-        """Rephrase as standalone question if there is conversation history."""
-        if chat_history:
-            return self._contextualize_chain.invoke({
-                "question": question,
-                "chat_history": chat_history,
-            })
-        return question
 
     @staticmethod
     def _format_context(docs: List[Document]) -> str:
@@ -141,8 +132,6 @@ class RAGChain:
         sections = []
         for i, doc in enumerate(docs, start=1):
             filename = doc.metadata.get("source_file", "Unknown Document")
-            page = doc.metadata.get("page", 0) + 1
-            sections.append(
-                f"[Source {i}: {filename}, Page {page}]\n{doc.page_content}"
-            )
+            page = int(doc.metadata.get("page", 0) or 0) + 1
+            sections.append(f"[Source {i}: {filename}, Page {page}]\n{doc.page_content}")
         return "\n\n─────────────────────────\n\n".join(sections)

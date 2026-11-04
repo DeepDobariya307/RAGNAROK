@@ -1,212 +1,96 @@
 ---
 title: RAGNAROK
-emoji: ⚡
-colorFrom: purple
-colorTo: blue
+emoji: 📚
+colorFrom: green
+colorTo: gray
 sdk: docker
 app_port: 7860
 pinned: false
 ---
 
-# ⚡ RAGNAROK
-### Multi-Document Intelligence Engine
+# RAGNAROK
 
-> *"Where knowledge meets the end of ignorance."*
+**Ask questions across your own documents and see exactly where every answer came from.**
 
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![LangChain](https://img.shields.io/badge/LangChain-LCEL-1C3C3C?style=flat-square)](https://langchain.com)
-[![OpenAI](https://img.shields.io/badge/GPT--4o-OpenAI-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com)
-[![Pinecone](https://img.shields.io/badge/Pinecone-Serverless-13AEA7?style=flat-square)](https://pinecone.io)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.38-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
-[![RAGAS](https://img.shields.io/badge/RAGAS-Evaluation-F97316?style=flat-square)](https://docs.ragas.io)
-[![Deploy](https://img.shields.io/badge/HuggingFace-Spaces-FFD21E?style=flat-square&logo=huggingface)](https://huggingface.co/spaces/DeepDobariya307/RAGNAROK)
+Upload PDFs, Word files, spreadsheets or images, ask in plain language, and get an answer with numbered citations. Click a citation to see the source passage, with the sentence closest to the cited claim highlighted.
+
+**Live demo:** [huggingface.co/spaces/DeepDobariya307/RAGNAROK](https://huggingface.co/spaces/DeepDobariya307/RAGNAROK)
 
 ---
 
-**RAGNAROK** is a production-grade Retrieval-Augmented Generation (RAG) system that enables intelligent, cited conversations across multiple PDF documents simultaneously. Upload research papers, reports, contracts — ask questions across all of them. Every answer cites the exact source and page number.
+## What it does
 
----
+- **Many file types.** PDF (text and tables), Word, Excel, CSV, plain text, and images (photos, scans and handwriting are read with GPT-4o vision).
+- **Cited answers.** Every claim carries a numbered badge. Clicking it opens the source passage, its location (page, sheet and rows) and a similarity score.
+- **Follow-up questions.** Follow-ups like "and how much of it do we hold?" are rewritten into full questions before searching, using the last 5 turns.
+- **Transparent pipeline.** "How this was found" shows each step (rephrase, retrieve, answer) with timings and passage counts.
+- **Built-in evaluation.** Scores the pipeline with RAGAS (faithfulness, answer relevancy, context precision). No reference answers needed.
+- **Adjustable retrieval.** Settings changes the model, how many passages are used, and the relevance-versus-variety balance (MMR).
+- **Private sessions.** Each browser tab gets its own Pinecone namespace, so users never see each other's documents.
 
-## 🏗️ Architecture
+## How it works
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     PDF Documents                        │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│              Document Processor (PyPDF)                  │
-│   Text extraction → RecursiveCharacterTextSplitter       │
-│   Chunk size: 1000 tokens | Overlap: 200 tokens          │
-│   Metadata: filename + page number per chunk             │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│           OpenAI text-embedding-3-large                  │
-│              3072-dimensional vectors                    │
-│          Industry's highest-quality embeddings           │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│              Pinecone Serverless Index                   │
-│     Cosine similarity | Session-namespaced storage       │
-│        MMR retrieval (k=6, fetch_k=20, λ=0.7)           │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│              LangChain LCEL RAG Chain                    │
-│  1. Contextualize question using chat history            │
-│  2. Retrieve diverse chunks via MMR                      │
-│  3. Format context with [Source N: file, Page X]         │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│                 GPT-4o Generation                        │
-│   Streaming token-by-token | Grounded in context only   │
-│   Sliding window memory (last 5 turns retained)         │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│              Streamlit Chat Interface                    │
-│   Real-time streaming | Source citation expanders        │
-│   Export to Markdown | RAGAS evaluation dashboard        │
-└─────────────────────────────────────────────────────────┘
+Upload ─► Read & split ─► Embed ─► Pinecone
+          (800-char chunks,  (text-embedding-3-large,
+           tables kept whole)  3072 dims)
+
+Question ─► Rewrite follow-up ─► Search 30 passages ─► Keep 15 with MMR ─► GPT-4o answers
+            (chat history)       (cosine similarity)   (relevant + varied)  with [Source N] citations
 ```
 
----
+## Run it locally (Windows)
 
-## ✨ Features
+1. Install **Python 3.12** from [python.org](https://www.python.org/downloads/).
+2. Double-click **`start.bat`**.
+   - The first run installs everything, which takes a few minutes.
+   - It then opens a `.env` file. Paste in your [OpenAI](https://platform.openai.com/api-keys) and [Pinecone](https://app.pinecone.io) keys, save, and double-click `start.bat` again.
+3. RAGNAROK opens at **http://localhost:7860**. Close the black window to stop it.
 
-| Feature | Description |
-|---|---|
-| 🗂️ **Multi-Document RAG** | Upload and query across multiple PDFs simultaneously |
-| ⚡ **Streaming Responses** | Real-time token streaming — feels like ChatGPT |
-| 📖 **Source Citations** | Every answer references `[Source N: filename, Page X]` |
-| 🔍 **MMR Retrieval** | Maximal Marginal Relevance avoids redundant context chunks |
-| 🧠 **Conversation Memory** | 5-turn sliding window for natural multi-turn dialogue |
-| 📊 **RAGAS Evaluation** | Built-in pipeline quality dashboard (Faithfulness, Relevancy) |
-| 💾 **Session Isolation** | Pinecone namespaces keep your docs private per session |
-| 📥 **Export** | Download full conversations as Markdown |
-| 🚀 **Railway Deploy** | One-click deployment with Docker |
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.10+
-- OpenAI API key ([platform.openai.com](https://platform.openai.com))
-- Pinecone API key ([pinecone.io](https://pinecone.io))
-
-### 1. Clone & Install
+On Mac or Linux:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/RAGNAROK.git
-cd RAGNAROK
-
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
+python3.12 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env        # then add your keys
+uvicorn server:app --port 7860
 ```
 
-### 2. Configure
-
-```bash
-cp .env.example .env
-```
-
-Open `.env` and fill in:
-```
-OPENAI_API_KEY=sk-...
-PINECONE_API_KEY=pcsk_...
-```
-
-### 3. Run
-
-```bash
-streamlit run app.py
-```
-
-Open [http://localhost:8501](http://localhost:8501) — you're live.
-
----
-
-## 📊 Evaluation
-
-Navigate to **Pages → Evaluation** in the Streamlit sidebar.
-
-Enter test questions, hit **Run Evaluation**, and get RAGAS metrics:
-
-- **Faithfulness** — Are answers factually consistent with retrieved context?
-- **Answer Relevancy** — Does the answer address the question?
-- **Context Relevancy** — Is the retrieved context on-point?
-
-All metrics work **without ground-truth answers**.
-
----
-
-## 🗂️ Project Structure
+## Project structure
 
 ```
-RAGNAROK/
-├── app.py                       # Main Streamlit application
-├── config.py                    # All tunable parameters (one place)
-├── pages/
-│   └── 2_Evaluation.py          # RAGAS evaluation dashboard
-├── core/
-│   ├── document_processor.py    # PDF ingestion + chunking
-│   ├── vector_store.py          # Pinecone index lifecycle
-│   └── rag_chain.py             # LangChain LCEL RAG pipeline
-├── ui/
-│   └── styles.py                # Custom dark Norse theme CSS
-├── utils/
-│   └── helpers.py               # Export + formatting utilities
-├── requirements.txt
-├── .env.example
-├── Dockerfile
-└── railway.toml
+server.py        Web server and API (FastAPI)
+config.py        All settings in one place
+core/
+  document_processor.py   Reads each file type and splits it into passages
+  vector_store.py         Pinecone storage and MMR search
+  rag_chain.py            Rewrites the question, retrieves, and streams the answer
+  evaluation.py           RAGAS scoring
+web/             The interface (HTML, CSS, JavaScript)
+start.bat        One-click start on Windows
+Dockerfile       Used by Hugging Face Spaces
 ```
 
----
-
-## ☁️ Live Demo
-
-👉 **[Try RAGNAROK live on HuggingFace Spaces](https://huggingface.co/spaces/DeepDobariya307/RAGNAROK)**
-
-## ☁️ Deploy Your Own
-
-1. Fork this repo
-2. Go to [huggingface.co/spaces](https://huggingface.co/spaces) → New Space → Docker
-3. Push your code
-4. Add `OPENAI_API_KEY` and `PINECONE_API_KEY` as Secrets in Space Settings
-5. Done — your own instance is live!
----
-
-## 🛠️ Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |---|---|
-| LLM | GPT-4o (OpenAI) |
-| Embeddings | text-embedding-3-large |
-| Vector DB | Pinecone Serverless |
-| RAG Framework | LangChain LCEL |
-| Frontend | Streamlit |
+| Language model | OpenAI GPT-4o (or GPT-4o-mini, switchable) |
+| Embeddings | OpenAI text-embedding-3-large |
+| Vector database | Pinecone serverless |
+| RAG pipeline | LangChain (LCEL) |
 | Evaluation | RAGAS |
-| Deployment | HuggingFace Spaces (Docker) |
+| Backend | FastAPI, streaming answers over server-sent events |
+| Frontend | Plain HTML, CSS and JavaScript |
+| Deployment | Docker on Hugging Face Spaces |
 
----
+## Deploy your own
 
-## 📝 License
+1. Create a new Space on Hugging Face and choose **Docker**.
+2. Push this repository to it.
+3. In the Space's **Settings → Secrets**, add `OPENAI_API_KEY` and `PINECONE_API_KEY`.
 
-MIT — use freely, build on it, give credit if you'd like.
+## Limitations
 
----
-
-*Built by **Deep Prakashbhai Dobariya** — MSc Artificial Intelligence, BTU Cottbus-Senftenberg*
+- Chats and uploaded documents are kept in server memory, so a restart clears them.
+- Answers are only as good as the retrieved passages. Questions about document metadata (for example "how many pages is each file?") aren't answered, because that information isn't in the text.

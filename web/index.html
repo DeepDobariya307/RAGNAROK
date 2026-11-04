@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-t="light" data-p="sage">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAGNAROK</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%232F5D4E'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='40' text-anchor='middle' fill='%23fff'%3ER%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<link rel="stylesheet" href="static/app.css">
+<script>
+  // Apply the saved theme before first paint so there is no flash.
+  try { var t = localStorage.getItem('rg_theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.t = t; } catch (e) {}
+  try { var p = new URLSearchParams(location.search).get('palette'); if (p) document.documentElement.dataset.p = p; } catch (e) {}
+</script>
+</head>
+<body>
+<div class="app">
+
+  <button class="theme-toggle" id="themeToggle" title="Switch theme" aria-label="Switch theme"><span class="knob" id="themeGlyph">☀</span></button>
+
+  <aside class="side" id="side">
+    <div class="brand-row"><div class="brand">Ragnarok</div></div>
+
+    <button class="new-chat" id="newChat">
+      <span class="plus-disc"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+      New chat
+    </button>
+
+    <div class="side-sec" id="recentSec" hidden>
+      <div class="side-label">Recent</div>
+      <div id="history"></div>
+    </div>
+
+    <div class="side-sec">
+      <div class="docs-head">
+        <div class="side-label-inline" id="docsLabel">Documents · 0</div>
+        <button class="icon-btn" data-add title="Add documents" aria-label="Add documents"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div>
+      <div id="docs"></div>
+      <button class="index-btn" id="indexBtn" hidden>Index new file</button>
+      <button class="drop" id="drop" data-add>Drop PDF, Word, Excel or images</button>
+      <input type="file" id="fileInput" multiple hidden accept=".pdf,.csv,.xlsx,.xls,.docx,.txt,.png,.jpg,.jpeg,.webp,.bmp">
+    </div>
+
+    <nav class="side-foot" id="navs">
+      <button class="nav" data-page="eval">
+        <span class="nav-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Evaluation
+      </button>
+      <button class="nav" data-page="settings">
+        <span class="nav-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4"/></svg></span>Settings
+      </button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <div class="head-title" id="headTitle">New chat</div>
+      <div class="scope" id="scope">0 documents · gpt-4o</div>
+    </div>
+
+    <!-- ══ Chat ══ -->
+    <section class="view" id="chatView">
+      <div class="empty" id="empty">
+        <div class="hero">
+          <div class="logo">R</div>
+          <div class="hero-title" id="heroTitle">What should we look up?</div>
+          <div class="hero-sub" id="heroSub">I'll answer from your documents and show where each fact came from.</div>
+        </div>
+        <div class="empty-col" id="emptyCol">
+          <div class="composer-big">
+            <input class="draft" id="draftBig" placeholder="Ask anything about your documents…" autocomplete="off">
+            <div class="composer-row">
+              <button class="clip" data-add title="Add documents" aria-label="Add documents"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7L10 17.7a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg></button>
+              <div style="flex:1"></div>
+              <button class="send" data-send title="Ask" aria-label="Ask"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+            </div>
+          </div>
+          <div class="suggest" id="suggest"></div>
+        </div>
+      </div>
+
+      <div class="thread-wrap" id="threadWrap" hidden>
+        <div class="thread" id="thread"></div>
+        <div class="dock">
+          <div class="composer">
+            <button class="clip-flat" data-add title="Add documents" aria-label="Add documents"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7L10 17.7a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg></button>
+            <input class="draft" id="draftDock" placeholder="Ask a follow-up…" autocomplete="off">
+            <button class="send" data-send title="Ask" aria-label="Ask"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+          </div>
+          <div class="disclaimer">Answers come only from your documents. Check the sources.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ Evaluation ══ -->
+    <section class="view page-eval" id="evalView" hidden>
+      <div>
+        <div class="page-title">Evaluation</div>
+        <div class="lede">Run test questions through the pipeline and score the answers with RAGAS. No reference answers needed.</div>
+      </div>
+      <div class="card card-pad">
+        <div class="field-label">Test questions, one per line</div>
+        <textarea id="evalText" rows="4" placeholder="What is the main argument of the document?&#10;What dates or deadlines are mentioned?&#10;What are the key conclusions?"></textarea>
+        <div class="eval-actions">
+          <button class="pill-primary" id="runEval">Run evaluation</button>
+          <div class="note" id="evalNote"></div>
+        </div>
+      </div>
+      <div class="eval-results" id="evalResults" hidden>
+        <div class="metrics" id="metrics"></div>
+        <div class="table-card">
+          <div class="table-top"><div class="table-title">Per question</div><a class="link" id="evalCsv" href="#" download>Download CSV</a></div>
+          <div class="qrow qhead"><span>Question</span><span>Faith.</span><span>Relev.</span><span>Prec.</span></div>
+          <div id="evalRows"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ Settings ══ -->
+    <section class="view page-settings" id="settingsView" hidden>
+      <div class="page-title">Settings</div>
+      <div class="card settings-card" id="settings"></div>
+      <div class="settings-actions">
+        <a class="pill-outline" id="exportBtn" href="#">Export chat (.md)</a>
+        <button class="pill-soft" id="clearBtn">Clear session</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ══ Source drawer ══ -->
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-label="Source">
+    <div class="drawer-top">
+      <div class="drawer-n"><span class="num" id="srcN">1</span><span class="drawer-kicker">Source</span></div>
+      <button class="close" id="srcClose" aria-label="Close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="drawer-doc" id="srcDoc"></div>
+    <div class="drawer-meta" id="srcMeta"></div>
+    <div class="drawer-img" id="srcImg" hidden></div>
+    <div class="passage" id="srcText"></div>
+    <div class="drawer-note" id="srcNote">The highlighted sentence is the closest match to the cited claim.</div>
+  </aside>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+
+<script src="static/vendor/marked-12.0.2.min.js"></script>
+<script src="static/vendor/purify-3.1.6.min.js"></script>
+<script src="static/app.js"></script>
+</body>
+</html>
