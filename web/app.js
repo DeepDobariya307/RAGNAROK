@@ -118,7 +118,7 @@
     return { html, order };
   }
 
-  // ── sentence highlight for the source drawer ─────────────────────────────
+  // ── fallback highlight (word overlap) if the server's meaning-based one is missing ──
   const STOP = new Set('the and for that with this from are was were has have had not but its their they them which what when where who will would can could should into than then there these those also such been being about after before over under per each other only more most some any all our your his her him she you'.split(' '));
   const words = (s) => (s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}.,%'-]*/gu) || [])
     .map((w) => w.replace(/[.,'-]+$/, '')).filter((w) => w.length > 2 && !STOP.has(w));
@@ -348,15 +348,27 @@
     }
     $('srcN').textContent = d;
     $('srcDoc').textContent = s.doc.replace(/_/g, '_​');
-    $('srcMeta').innerHTML = `<span class="tag tag-md ${tagCls(s.fmt)}">${esc(s.fmt)}</span><span>${esc(s.loc)}</span><span>·</span><span>match ${Number(s.score).toFixed(2)}</span>`;
+    const hl = s.hl && s.hl.text && s.text.includes(s.hl.text) ? s.hl : null;
+    $('srcMeta').innerHTML = `<span class="tag tag-md ${tagCls(s.fmt)}">${esc(s.fmt)}</span><span>${esc(s.loc)}</span>`
+      + `<span>·</span><span title="How close this passage is in meaning to your question (cosine similarity)">question match ${Number(s.score).toFixed(2)}</span>`
+      + (hl ? `<span>·</span><span title="How close the highlighted sentence is in meaning to the claim that cites it (cosine similarity)">claim match ${Number(hl.score).toFixed(2)}</span>` : '');
     const img = $('srcImg');
     img.hidden = !s.isImg;
     if (s.isImg) img.innerHTML = `<img alt="${esc(s.doc)}" src="api/files?name=${encodeURIComponent(s.doc)}&sid=${SID}" onerror="this.parentNode.textContent='Image preview'">`;
-    const parts = highlight(s.text, claim);
+    // Preferred: the server's meaning-based pick. Fallback: the sentence sharing the most words.
+    let parts, note;
+    if (hl) {
+      const a = s.text.indexOf(hl.text);
+      parts = [s.text.slice(0, a), hl.text, s.text.slice(a + hl.text.length)];
+      note = 'Highlighted: the sentence closest in meaning to the claim that cites it.';
+    } else {
+      parts = highlight(s.text, claim);
+      note = parts ? 'Highlighted: the sentence sharing the most words with the claim that cites it.' : 'The whole passage the answer cites.';
+    }
     $('srcText').innerHTML = parts
       ? `<span>${esc(parts[0])}</span><mark>${esc(parts[1])}</mark><span>${esc(parts[2])}</span>`
       : `<span>${esc(s.text)}</span>`;
-    $('srcNote').textContent = parts ? 'The highlighted sentence is the closest match to the cited claim.' : 'The whole passage the answer cites.';
+    $('srcNote').textContent = note;
     $('scrim').hidden = false; $('drawer').hidden = false;
     renderThread();
     $('srcClose').focus();
@@ -434,6 +446,7 @@
         } else if (ev === 'done') {
           if (local.messages[local.messages.length - 1].role === 'pending') { local.messages.pop(); local.messages.push(bot); }
           bot.streaming = false; bot.trace = data.trace;
+          for (const [i, h] of Object.entries(data.highlights || {})) if (bot.sources[+i]) bot.sources[+i].hl = h;
         } else if (ev === 'error') {
           throw new Error(data.message);
         }

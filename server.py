@@ -30,7 +30,7 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 
 from config import config
-from core import DocumentProcessor, RAGChain, VectorStoreManager
+from core import DocumentProcessor, RAGChain, VectorStoreManager, highlight
 
 load_dotenv()
 
@@ -174,10 +174,11 @@ def location(meta: dict) -> str:
         if meta.get("sheet"):
             return f"Sheet “{meta['sheet']}” · {rows}"
         return f"{rows[0].upper()}{rows[1:]} of {_int(meta.get('total_rows')):,}"
-    if name.endswith(".pdf"):
-        page = _int(meta.get("page")) + 1
-        return f"Table · page {page}" if kind == "table" else f"Page {page}"
-    return "Text passage"
+    page = f"page {_int(meta.get('page')) + 1}" if name.endswith(".pdf") else ""
+    if kind == "table":
+        label = meta.get("caption") or "Table"
+        return f"{label} · {page}" if page else label
+    return page.capitalize() if page else "Text passage"
 
 
 def source_view(d: Document) -> dict:
@@ -389,6 +390,14 @@ def ask(body: dict = Body(...), x_session: str = Header(None)):
             yield sse("error", {"message": str(e)})
             return
 
+        # Which sentence of each cited source the answer relies on (meaning, not word overlap).
+        try:
+            highlights = highlight.best_sentences(rag.vs_manager.embeddings, full, [s["text"] for s in sources])
+        except Exception:
+            highlights = {}                      # the drawer falls back to word matching
+        for i, h in highlights.items():
+            sources[i]["hl"] = h
+
         turns = len(history) // 2
         files = len({src["doc"] for src in sources})
         cited = cited_numbers(full, len(docs))
@@ -406,7 +415,7 @@ def ask(body: dict = Body(...), x_session: str = Header(None)):
         with s.lock:
             chat["messages"].append(msg)
             chat["history"] = (chat["history"] + [HumanMessage(content=question), AIMessage(content=full)])[-config.MEMORY_WINDOW * 2:]
-        yield sse("done", {"trace": trace, "docCount": n_docs})
+        yield sse("done", {"trace": trace, "docCount": n_docs, "highlights": highlights})
 
     return StreamingResponse(run(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

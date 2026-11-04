@@ -4,20 +4,21 @@ Supports: PDF (text + tables), CSV, Excel, DOCX, TXT, Images, Handwriting
 Each file type gets a specialised handler for maximum accuracy.
 """
 
+import io
 import os
 import re
 import base64
-import tempfile
 from typing import List
 
 import pandas as pd
-import pdfplumber
 import docx2txt
 from openai import OpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 from config import config
+from core import tables
+from core.pdf_reader import read_pdf
 
 
 class DocumentProcessor:
@@ -59,91 +60,8 @@ class DocumentProcessor:
     # ── PDF Handler ──────────────────────────────────────────────────────────
 
     def _process_pdf(self, uploaded_file) -> List[Document]:
-        """
-        Uses pdfplumber for superior extraction.
-        Tables are converted to markdown and kept as complete chunks.
-        """
-        docs = []
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(uploaded_file.read())
-            tmp_path = tmp.name
-
-        try:
-            with pdfplumber.open(tmp_path) as pdf:
-                for page_num, page in enumerate(pdf.pages):
-
-                    tables = page.extract_tables()
-
-                    for table in tables:
-                        if not table or not table[0]:
-                            continue
-                        markdown = self._table_to_markdown(table)
-                        if markdown:
-                            docs.append(Document(
-                                page_content=markdown,
-                                metadata={
-                                    "source_file": uploaded_file.name,
-                                    "page": page_num,
-                                    "type": "table",
-                                }
-                            ))
-
-                    text = self._page_text(page)
-                    if text and text.strip():
-                        text_chunks = self.splitter.split_text(text)
-                        for chunk in text_chunks:
-                            if chunk.strip():
-                                docs.append(Document(
-                                    page_content=chunk,
-                                    metadata={
-                                        "source_file": uploaded_file.name,
-                                        "page": page_num,
-                                        "type": "text",
-                                    }
-                                ))
-        finally:
-            os.unlink(tmp_path)
-
-        return docs
-
-    # Words closer than this (in PDF points) count as one word. pdfplumber's
-    # default of 3 glues tightly set words together ("Identifiederrors,and…").
-    X_TOLERANCE = 1.5
-
-    @classmethod
-    def _page_text(cls, page) -> str:
-        """
-        Page text in reading order. Two-column pages (common in regulations,
-        papers and reports) are read left column first, then right; reading
-        straight across would interleave lines from both columns.
-        """
-        if cls._is_two_column(page):
-            mid = page.width / 2
-            left = page.crop((0, 0, mid, page.height)).extract_text(x_tolerance=cls.X_TOLERANCE) or ""
-            right = page.crop((mid, 0, page.width, page.height)).extract_text(x_tolerance=cls.X_TOLERANCE) or ""
-            text = left + "\n\n" + right
-        else:
-            text = page.extract_text(x_tolerance=cls.X_TOLERANCE) or ""
-        return cls._join_hyphenated(text)
-
-    @staticmethod
-    def _is_two_column(page) -> bool:
-        """Two columns = almost no words cross the page centre, and both halves hold text."""
-        words = page.extract_words()
-        if len(words) < 40:
-            return False
-        mid = page.width / 2
-        crossing = sum(1 for w in words if w["x0"] < mid - 5 and w["x1"] > mid + 5)
-        left = sum(1 for w in words if w["x1"] <= mid + 5)
-        right = sum(1 for w in words if w["x0"] >= mid - 5)
-        return crossing <= 0.015 * len(words) and min(left, right) >= 0.2 * len(words)
-
-    @staticmethod
-    def _join_hyphenated(text: str) -> str:
-        """Rejoin words split across lines: 'schriftli-\nche' -> 'schriftliche'.
-        Keeps real hyphens before 'und/oder/and/or' ('Prüfungs- und Studienordnung')."""
-        return re.sub(r"([A-Za-zÀ-ÖØ-öø-ÿ])-\n(?!(?:und|oder|bzw|and|or)\b)([a-zß-öø-ÿ])", r"\1\2", text)
+        """Tables stored once as Markdown, text in reading order (see core/pdf_reader.py)."""
+        return read_pdf(uploaded_file, uploaded_file.name, self.splitter)
 
     # ── CSV Handler ──────────────────────────────────────────────────────────
 
@@ -173,30 +91,55 @@ class DocumentProcessor:
     # ── DOCX Handler ─────────────────────────────────────────────────────────
 
     def _process_docx(self, uploaded_file) -> List[Document]:
-        """Extract text from Word documents."""
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-            tmp.write(uploaded_file.read())
-            tmp_path = tmp.name
-
+        """
+        Word documents in document order: paragraphs become text chunks and each
+        table becomes Markdown chunks with its header repeated. Falls back to
+        plain-text extraction if the file can't be parsed as a table-aware document.
+        """
+        data = uploaded_file.read()
         try:
-            text = docx2txt.process(tmp_path)
-        finally:
-            os.unlink(tmp_path)
+            return self._docx_with_tables(io.BytesIO(data), uploaded_file.name)
+        except Exception:
+            text = docx2txt.process(io.BytesIO(data)) or ""
+            return self._text_docs(text, uploaded_file.name)
 
-        if not text or not text.strip():
-            return []
+    def _docx_with_tables(self, stream, filename: str) -> List[Document]:
+        from docx import Document as WordDocument
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
 
-        chunks = self.splitter.split_text(text)
+        word = WordDocument(stream)
+        docs: List[Document] = []
+        pending: List[str] = []          # paragraphs since the last table
+        table_no = 0
+
+        for child in word.element.body.iterchildren():
+            tag = child.tag.rsplit("}", 1)[-1]
+            if tag == "p":
+                text = Paragraph(child, word).text.strip()
+                if text:
+                    pending.append(text)
+            elif tag == "tbl":
+                table_no += 1
+                grid = tables.normalise([[cell.text for cell in row.cells] for row in Table(child, word).rows])
+                caption = pending[-1] if pending and re.match(r"^(Table|Tabelle)\s*\d+", pending[-1], re.I) else None
+                docs += self._text_docs("\n\n".join(pending), filename)
+                pending = []
+                if not grid:
+                    continue
+                title = f"{caption or f'Table {table_no}'} — {filename}"
+                for block in tables.to_markdown_blocks(grid[0], grid[1:], title):
+                    docs.append(Document(page_content=block, metadata={
+                        "source_file": filename, "page": 0, "type": "table",
+                        **({"caption": caption} if caption else {}),
+                    }))
+        docs += self._text_docs("\n\n".join(pending), filename)
+        return docs
+
+    def _text_docs(self, text: str, filename: str) -> List[Document]:
         return [
-            Document(
-                page_content=chunk,
-                metadata={
-                    "source_file": uploaded_file.name,
-                    "page": 0,
-                    "type": "text",
-                }
-            )
-            for chunk in chunks if chunk.strip()
+            Document(page_content=chunk, metadata={"source_file": filename, "page": 0, "type": "text"})
+            for chunk in (self.splitter.split_text(text) if text.strip() else []) if chunk.strip()
         ]
 
     # ── TXT Handler ──────────────────────────────────────────────────────────
@@ -356,31 +299,6 @@ class DocumentProcessor:
             ))
 
         return docs
-
-    @staticmethod
-    def _table_to_markdown(table: list) -> str:
-        """Convert a pdfplumber table (list of lists) to clean markdown."""
-        if not table or not table[0]:
-            return ""
-
-        cleaned = []
-        for row in table:
-            cleaned_row = [str(cell).strip() if cell else "" for cell in row]
-            cleaned.append(cleaned_row)
-
-        header = cleaned[0]
-        rows = cleaned[1:]
-
-        md_lines = []
-        md_lines.append("| " + " | ".join(header) + " |")
-        md_lines.append("| " + " | ".join(["---"] * len(header)) + " |")
-
-        for row in rows:
-            while len(row) < len(header):
-                row.append("")
-            md_lines.append("| " + " | ".join(row) + " |")
-
-        return "\n".join(md_lines)
 
     @staticmethod
     def summarise(chunks: List[Document]) -> dict:
